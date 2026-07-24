@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ore Dipendenti Union14srl</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <!-- Librerie -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+    <!-- Skip Link per Accessibilità -->
+    <a href="#appcontent" class="skip-link">Salta al contenuto principale</a>
+
+    <!-- Dark Mode Toggle -->
+    <button class="dark-mode-toggle" id="darkModeToggle" aria-label="Attiva/Disattiva modalità scura">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    <!-- LOGIN PAGE -->
+    <div id="loginPage" class="login-container" role="main" aria-label="Pagina di accesso">
+        <div class="login-form" role="form" aria-label="Modulo di accesso">
+            <div class="login-header">
+             <!-- 🔥 LOGO -->
+            <div class="login-logo-container">
+                <img src="logo.png" alt="UNION14 srl" class="login-logo-img">
+            </div>
+                <h2>Ore Dipendenti</h2>
+                <p class="text-muted">Accedi al sistema di gestione</p>
+            </div>
+            
+            <div id="loginError" class="alert alert-danger" style="display: none;" role="alert">
+                <i class="fas fa-exclamation-circle"></i> Credenziali non valide
+            </div>
+            
+            <div class="mb-3">
+                <label for="inputEmail" class="form-label">Email</label>
+                <input type="email" id="inputEmail" placeholder="esempio@email.it" aria-label="Email" class="form-control">
+            </div>
+            
+            <div class="mb-3">
+                <label for="inputPassword" class="form-label">Password</label>
+                <input type="password" id="inputPassword" placeholder="••••••••" aria-label="Password" class="form-control">
+            </div>
+            
+            <button id="btnLogin" class="btn btn-primary w-100">
+                <i class="fas fa-sign-in-alt"></i> Accedi
+            </button>
+            
+            <div class="login-footer mt-3">
+                <small class="text-muted">Sistema di gestione ore lavorative</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- APP CONTENT -->
+    <div id="appContent" style="display: none;" class="container-fluid" role="main" id="main">
+        <!-- NAVBAR -->
+       <!-- Versione corretta -->
+<nav class="navbar navbar-light mb-4" role="navigation" aria-label="Navigazione principale">
+    <div class="container-fluid">
+        <div class="d-flex align-items-center gap-3">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="logo.png" alt="Union14 Logo" height="40" class="logo-img">
+                <span class="navbar-brand">
+                    <i class="fas fa-clock"></i> Gestione Ore Lavorative
+                    <span class="badge bg-primary ms-2" id="userRoleBadge"></span>
+                </span>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-muted small" id="userNameDisplay"></span>
+                <button id="logoutButton" class="btn btn-outline-danger">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </div>
+    </div>
+</nav>
+
+        <!-- SEZIONE DIPENDENTI -->
+        <div class="dipendente-only card mb-4">
+            <div class="card-header">
+                <h2><i class="fas fa-clock"></i> Registrazione Ore Lavorate</h2>
+            </div>
+            <div class="card-body">
+                <!-- Skeleton Loading -->
+                <div id="oreFormSkeleton" class="skeleton-loader">
+                    <div class="skeleton-line" style="width: 100%; height: 40px;"></div>
+                    <div class="skeleton-line" style="width: 100%; height: 40px;"></div>
+                    <div class="skeleton-line" style="width: 100%; height: 100px;"></div>
+                </div>
+
+                <form id="oreForm" class="row g-3" style="display: none;">
+                    <div class="col-md-6">
+                        <label for="oreCommessa" class="form-label">
+                            <i class="fas fa-briefcase"></i> Commessa:
+                        </label>
+                        <select id="oreCommessa" class="form-select" required aria-required="true">
+                            <option value="">Seleziona una commessa</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="oreData" class="form-label">
+                            <i class="fas fa-calendar"></i> Data:
+                        </label>
+                        <input type="date" id="oreData" class="form-control" required aria-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="oreInizio" class="form-label">
+                            <i class="fas fa-play"></i> Ora Inizio:
+                        </label>
+                        <input type="time" id="oreInizio" class="form-control" required aria-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="oreFine" class="form-label">
+                            <i class="fas fa-stop"></i> Ora Fine:
+                        </label>
+                        <input type="time" id="oreFine" class="form-control" required aria-required="true">
+                    </div>
+                    <div class="col-12">
+                        <label for="oreDescrizione" class="form-label">
+                            <i class="fas fa-align-left"></i> Descrizione Lavoro:
+                        </label>
+                        <textarea id="oreDescrizione" class="form-control" rows="3" required aria-required="true" placeholder="Descrivi il lavoro svolto..."></textarea>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input type="checkbox" id="nonConformita" class="form-check-input">
+                            <label for="nonConformita" class="form-check-label">
+                                <i class="fas fa-exclamation-triangle text-warning"></i> Non Conformità
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Salva Ore Lavorate
+                        </button>
+                        <button type="reset" class="btn btn-secondary">
+                            <i class="fas fa-undo"></i> Resetta
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- Visualizzazione Fasce Orarie -->
+                <div id="visualizzazioneFasce" class="fasce-orarie-container mt-4" style="display: none;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-calendar-day"></i> Situazione Oraria per la Giornata Selezionata</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="fasceOccupate" class="fasce-orarie-list"></div>
+                            <div class="timeline-container mt-3">
+                                <div class="timeline-title">Timeline Giornata:</div>
+                                <div class="timeline-giornata">
+                                    <div class="pausa-timeline" title="Pausa Pranzo 12:00-13:00"></div>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-2 d-block">
+                                <i class="fas fa-info-circle"></i> Le fasce in rosso indicano orari già occupati
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SEZIONE ADMIN -->
+        <div class="admin-only">
+            <!-- MONITORAGGIO COMMESSE -->
+            <div class="card mb-4" id="monitorCommesse">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h3 class="mb-0"><i class="fas fa-chart-line"></i> Monitoraggio Margini Commesse</h3>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button id="btnDiagnosticaCommesse" class="btn btn-sm btn-outline-info">
+                            <i class="fas fa-stethoscope"></i> Diagnostica
+                        </button>
+                        <button id="btnDebugCommesse" class="btn btn-sm btn-outline-warning">
+                            <i class="fas fa-bug"></i> Debug
+                        </button>
+                        <button id="btnTestPDF" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-file-pdf"></i> Test PDF
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- FILTRI MONITORAGGIO -->
+                    <div class="row mb-3 g-2">
+                        <div class="col-md-3">
+                            <label for="filtroNomeCommessa" class="form-label">Cerca Commessa:</label>
+                            <input type="text" id="filtroNomeCommessa" class="form-control" 
+                                   placeholder="Nome commessa..." list="listaCommesse">
+                            <datalist id="listaCommesse"></datalist>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filtroCommessaMonitor" class="form-label">Stato:</label>
+                            <select id="filtroCommessaMonitor" class="form-select">
+                                <option value="">Tutte</option>
+                                <option value="attive">Solo attive</option>
+                                <option value="concluse">Solo concluse</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filtroAnnoMonitor" class="form-label">Anno:</label>
+                            <select id="filtroAnnoMonitor" class="form-select">
+                                <option value="">Tutti</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filtroMeseMonitor" class="form-label">Mese:</label>
+                            <select id="filtroMeseMonitor" class="form-select">
+                                <option value="">Tutti</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                          <label for="filtroFatturato" class="form-label">Fatturato:</label>
+                         <select id="filtroFatturato" class="form-select">
+                             <option value="">Tutti</option>
+                              <option value="fatturato">Fatturato</option>
+                                <option value="da_fatturare">Da fatturare</option>
+                                </select>
+                            </div>
+                        <div class="col-md-3 d-flex align-items-end gap-2">
+                            <button id="btnAggiornaMonitor" class="btn btn-primary flex-fill">
+                                <i class="fas fa-sync-alt"></i> Aggiorna
+                            </button>
+                            <button id="btnResetFiltriMonitor" class="btn btn-secondary">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button id="btnScaricaPDFMonitor" class="btn btn-success">
+                                <i class="fas fa-file-pdf"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- TABELLA MONITORAGGIO -->
+                    <div class="table-responsive">
+                        <table id="monitorCommesseTable" class="table table-striped table-bordered table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Commessa</th>
+                                    <th>Preventivo (€)</th>
+                                    <th>Ore Lav/Prev</th>
+                                    <th>Ore NC</th>
+                                    <th>Integr.</th>
+                                    <th>Costo Dip. (€)</th>
+                                    <th>Costo Forn. (€)</th>
+                                    <th>Costo Tot. (€)</th>
+                                    <th>Margine (€)</th>
+                                    <th>Margine (%)</th>
+                                    <th>Stato</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="11" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin fa-2x mb-2 d-block"></i>
+                                        Caricamento dati...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Legenda -->
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="alert alert-info py-2">
+                                <small>
+                                    <strong>Legenda:</strong> 
+                                    <span class="badge bg-success">ECCELLENTE</span> 
+                                    <span class="badge bg-info">BUONO</span> 
+                                    <span class="badge bg-warning text-dark">SUFFICIENTE</span> 
+                                    <span class="badge bg-danger">LIMITE</span> 
+                                    <span class="badge bg-dark">IN PERDITA</span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRAFICI DASHBOARD -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h3 class="mb-0"><i class="fas fa-chart-pie"></i> Dashboard Grafica</h3>
+                    <div class="d-flex gap-2">
+                        <button id="btnAggiornaGrafici" class="btn btn-sm btn-primary">
+                            <i class="fas fa-sync-alt"></i> Aggiorna
+                        </button>
+                        <button id="btnEsportaGrafici" class="btn btn-sm btn-success">
+                            <i class="fas fa-download"></i> Esporta PNG
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Grafico Margini -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <h5 class="mb-0"><i class="fas fa-chart-line"></i> Margini Commesse</h5>
+                                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                                            <select id="filtroAnnoMargini" class="form-select form-select-sm" style="width: 100px;">
+                                                <option value="">Tutti</option>
+                                            </select>
+                                            <select id="filtroMeseMargini" class="form-select form-select-sm" style="width: 120px;">
+                                                <option value="">Tutti i mesi</option>
+                                            </select>
+                                            <button id="btnApplicaFiltriMargini" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-filter"></i>
+                                            </button>
+                                            <button id="btnResetFiltriMargini" class="btn btn-sm btn-secondary">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" id="btnPrecMargini" disabled>
+                                                <i class="fas fa-chevron-left"></i> Prec
+                                            </button>
+                                            <span class="badge bg-secondary d-flex align-items-center px-3" id="paginaMarginiInfo">Pagina 1</span>
+                                            <button class="btn btn-outline-secondary" id="btnSuccMargini">
+                                                Succ <i class="fas fa-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted" id="infoFiltriMargini"></small>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="chartMarginiCommesse" style="height: 300px; width: 100%;"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Grafico Stato Commesse -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Stato Commesse</h5>
+                                </div>
+                                <div class="card-body d-flex align-items-center justify-content-center">
+                                    <canvas id="chartStatoCommesse" style="max-height: 300px; max-width: 400px;"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Grafico Ore Dipendenti -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <h5 class="mb-0"><i class="fas fa-users"></i> Ore Lavorate per Dipendente</h5>
+                                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                                            <select id="filtroAnnoOreDipendenti" class="form-select form-select-sm" style="width: 100px;">
+                                                <option value="">Tutti</option>
+                                            </select>
+                                            <select id="filtroMeseOreDipendenti" class="form-select form-select-sm" style="width: 120px;">
+                                                <option value="">Tutti i mesi</option>
+                                            </select>
+                                            <button id="btnApplicaFiltriOreDipendenti" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-filter"></i>
+                                            </button>
+                                            <button id="btnResetFiltriOreDipendenti" class="btn btn-sm btn-secondary">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" id="btnPrecOreDipendenti" disabled>
+                                                <i class="fas fa-chevron-left"></i> Prec
+                                            </button>
+                                            <span class="badge bg-secondary d-flex align-items-center px-3" id="paginaOreDipendentiInfo">Pagina 1</span>
+                                            <button class="btn btn-outline-secondary" id="btnSuccOreDipendenti">
+                                                Succ <i class="fas fa-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted" id="infoFiltriOreDipendenti"></small>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="chartOreDipendenti" style="height: 300px; width: 100%;"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Grafico Andamento Mensile -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0"><i class="fas fa-calendar-alt"></i> Andamento Mensile Ore</h5>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="chartAndamentoMensile" style="max-height: 300px;"></canvas>
+                                    <div id="summaryAndamento" class="mt-3"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BACKUP DATI -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3 class="mb-0"><i class="fas fa-database"></i> Backup e Ripristino Dati</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-download fa-3x mb-3 text-primary"></i>
+                                    <h5>Esporta Backup</h5>
+                                    <p class="small text-muted">Esporta tutti i dati (commesse, dipendenti, ore, fornitori)</p>
+                                    <button id="btnBackupDati" class="btn btn-primary">
+                                        <i class="fas fa-download"></i> Scarica Backup JSON
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-upload fa-3x mb-3 text-warning"></i>
+                                    <h5>Importa Backup</h5>
+                                    <p class="small text-muted">Carica un file JSON per ripristinare i dati</p>
+                                    <input type="file" id="fileBackupInput" accept=".json" style="display: none;" aria-label="Seleziona file backup">
+                                    <button id="btnRipristinoDati" class="btn btn-warning">
+                                        <i class="fas fa-upload"></i> Carica Backup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="alert alert-info small">
+                                <i class="fas fa-info-circle"></i> 
+                                <strong>Info:</strong> Il backup include tutte le commesse, dipendenti, ore lavorate e fornitori. 
+                                Il ripristino SOSTITUIRÀ i dati esistenti. Si consiglia di fare un backup prima di importare.
+                            </div>
+                        </div>
+                    </div>
+                    <div id="infoUltimoBackup" class="text-center text-muted small mt-2"></div>
+                </div>
+            </div>
+
+            <!-- STORICO ORE LAVORATE -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="fas fa-list"></i> Storico Ore Lavorate</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Filtri -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h4><i class="fas fa-filter"></i> Filtri Ore Lavorate</h4>
+                        </div>
+                        <div class="card-body">
+                            <form id="filtraOreLavorate">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="filtroCommessa" class="form-label">Commessa:</label>
+                                        <input type="text" id="filtroCommessa" class="form-control" placeholder="Nome commessa...">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="filtroDipendente" class="form-label">Dipendente:</label>
+                                        <input type="text" id="filtroDipendente" class="form-control" placeholder="Nome dipendente...">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="filtroAnno" class="form-label">Anno</label>
+                                        <select id="filtroAnno" class="form-select"></select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="filtroMese" class="form-label">Mese</label>
+                                        <select id="filtroMese" class="form-select">
+                                            <option value="">Tutti</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="filtroGiorno" class="form-label">Giorno</label>
+                                        <select id="filtroGiorno" class="form-select">
+                                            <option value="">Tutti</option>
+                                        </select>
+                                    </div>
+                                     <div class="col-12">
+        <div class="form-check">
+            <input type="checkbox" id="filtroNonConformita" class="form-check-input">
+            <label for="filtroNonConformita" class="form-check-label">
+                <i class="fas fa-exclamation-triangle text-warning"></i> Mostra solo Non Conformità (NC)
+            </label>
+                                     <!-- PULSANTI FILTRI ESISTENTI -->
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check"></i> Applica Filtri
+                    </button>
+                    <button type="button" id="btnResetFiltri" class="btn btn-secondary">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                    <button type="button" id="btnScaricaPDF" class="btn btn-success">
+                        <i class="fas fa-file-pdf"></i> Scarica PDF
+                    </button>
+                    <button type="button" id="btnMostraTutti" class="btn btn-info">
+                        <i class="fas fa-eye"></i> Mostra Tutti
+                    </button>
+                </div>
+                
+                <!-- 🔥 PULSANTI DI ORDINAMENTO (NUOVI) -->
+                <div class="col-12 mt-2">
+                    <div class="d-flex flex-wrap align-items-center gap-1 p-2 bg-light rounded">
+                        <span class="text-muted small me-1"><i class="fas fa-sort"></i> <strong>Ordina per:</strong></span>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.cambiaOrdineOre('data_desc')">
+                            <i class="fas fa-sort-amount-down"></i> Recenti
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.cambiaOrdineOre('data_asc')">
+                            <i class="fas fa-sort-amount-up"></i> Vecchi
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.cambiaOrdineOre('commessa')">
+                            <i class="fas fa-sort-alpha-down"></i> Commessa
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.cambiaOrdineOre('dipendente')">
+                            <i class="fas fa-sort-alpha-down"></i> Dipendente
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.cambiaOrdineOre('ore')">
+                            <i class="fas fa-sort-numeric-down"></i> Max ore
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.cambiaOrdineOre('ore_asc')">
+                            <i class="fas fa-sort-numeric-up"></i> Min ore
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+                    <!-- Tabella -->
+                    <div class="table-responsive">
+                        <table id="orelavorateTable" class="table table-striped table-bordered">
+                            <thead class="table-primary">
+                                <tr>
+                                    <th>Commessa</th>
+                                    <th>Dipendente</th>
+                                    <th>Data</th>
+                                    <th>Ora Inizio</th>
+                                    <th>Ora Fine</th>
+                                    <th>Descrizione</th>
+                                    <th>Non Conformità</th>
+                                    <th>Ore Lavorate</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin fa-2x mb-2 d-block"></i>
+                                        Caricamento dati...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationOre" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- REPORT MENSILI -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="fas fa-calendar-alt"></i> Report Mensili</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label for="selettoreMese" class="form-label">Seleziona un mese:</label>
+                            <select id="selettoreMese" class="form-select">
+                                <option value="0">Gennaio</option>
+                                <option value="1">Febbraio</option>
+                                <option value="2">Marzo</option>
+                                <option value="3">Aprile</option>
+                                <option value="4">Maggio</option>
+                                <option value="5">Giugno</option>
+                                <option value="6">Luglio</option>
+                                <option value="7">Agosto</option>
+                                <option value="8">Settembre</option>
+                                <option value="9">Ottobre</option>
+                                <option value="10">Novembre</option>
+                                <option value="11">Dicembre</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <button id="btnMostraTabella" class="btn btn-primary w-100">
+                                <i class="fas fa-table"></i> Genera Report
+                            </button>
+                        </div>
+                    </div>
+                    <div id="tabelleMensili" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- GESTIONE COMMESSE -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="fas fa-briefcase"></i> Gestione Commesse</h3>
+                </div>
+                <div class="card-body">
+                    <form id="commessaForm" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="nomeCommessa" class="form-label">Nome Commessa:</label>
+                            <input type="text" id="nomeCommessa" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cliente" class="form-label">Cliente:</label>
+                            <input type="text" id="cliente" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="valorePreventivo" class="form-label">Valore Preventivo (€):</label>
+                            <input type="number" id="valorePreventivo" class="form-control" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="dataCommessa" class="form-label">Data Inizio:</label>
+                            <input type="date" id="dataCommessa" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="statoCommessa" class="form-label">Stato:</label>
+                            <select id="statoCommessa" class="form-select" required>
+                                <option value="attiva">Attiva</option>
+                                <option value="conclusa">Conclusa</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-plus"></i> Aggiungi Commessa
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="search-container mt-4 mb-3">
+                        <div class="input-group">
+                            <input type="text" id="cercaCommessa" class="form-control" placeholder="Cerca commessa...">
+                            <button id="btnCercaCommessa" class="btn btn-outline-primary">Cerca</button>
+                            <button id="btnResetCercaCommessa" class="btn btn-outline-secondary">Reset</button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table id="commesseTable" class="table table-striped table-bordered">
+                            <thead class="table-info">
+                                <tr>
+                                    <th>Nome Commessa</th>
+                                    <th>Cliente</th>
+                                    <th>Valore Preventivo (€)</th>
+                                    <th>Ore Totali Previste</th>
+                                    <th>Data Inizio</th>
+                                    <th>Stato</th>
+                                     <th>Fatturato</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin fa-2x mb-2 d-block"></i>
+                                        Caricamento...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationCommesse" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- GESTIONE FORNITORI -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3><i class="fas fa-truck"></i> Gestione Fornitori Esterni</h3>
+                </div>
+                <div class="card-body">
+                    <form id="fornitoreForm" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="fornitoreNome" class="form-label">Nome Fornitore:</label>
+                            <input type="text" id="fornitoreNome" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="fornitoreCommessa" class="form-label">Commessa Associata:</label>
+                            <select id="fornitoreCommessa" class="form-select" required>
+                                <option value="">Seleziona una commessa</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="fornitoreCosto" class="form-label">Costo Lavorazione (€):</label>
+                            <input type="number" id="fornitoreCosto" class="form-control" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fornitoreDescrizione" class="form-label">Descrizione Lavoro:</label>
+                            <textarea id="fornitoreDescrizione" class="form-control" rows="2"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fornitoreData" class="form-label">Data Lavorazione:</label>
+                            <input type="date" id="fornitoreData" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-plus"></i> Aggiungi Lavorazione
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="table-responsive mt-4">
+                        <table id="fornitoriTable" class="table table-striped table-bordered">
+                            <thead class="table-secondary">
+                                <tr>
+                                    <th>Fornitore</th>
+                                    <th>Commessa</th>
+                                    <th>Costo (€)</th>
+                                    <th>Descrizione</th>
+                                    <th>Data</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin fa-2x mb-2 d-block"></i>
+                                        Caricamento...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationFornitori" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- GESTIONE DIPENDENTI -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0"><i class="fas fa-users"></i> Gestione Dipendenti</h3>
+                    <button id="btnScaricaPDFDipendenti" class="btn btn-success btn-sm">
+                        <i class="fas fa-file-pdf"></i> Scarica Rubrica PDF
+                    </button>
+                </div>
+                <div class="card-body">
+                    <form id="dipendentiForm" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="dipendenteNome" class="form-label">Nome:</label>
+                            <input type="text" id="dipendenteNome" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="dipendenteCognome" class="form-label">Cognome:</label>
+                            <input type="text" id="dipendenteCognome" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="dipendenteEmail" class="form-label">Email:</label>
+                            <input type="email" id="dipendenteEmail" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="dipendentePassword" class="form-label">Password:</label>
+                            <input type="password" id="dipendentePassword" class="form-control" required>
+                        </div>
+                        <div class="col-md-12">
+                            <label for="dipendenteRuolo" class="form-label">Ruolo:</label>
+                            <select id="dipendenteRuolo" class="form-select" required>
+                                <option value="admin">Amministratore</option>
+                                <option value="dipendente">Dipendente</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" style="display: none;">
+    <label for="dipendenteUserId" class="form-label">User ID</label>
+    <input type="text" id="dipendenteUserId" class="form-control" readonly>
+</div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-user-plus"></i> Aggiungi Dipendente
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="table-responsive mt-4">
+                        <table id="dipendentiTable" class="table table-striped table-bordered">
+                            <thead class="table-warning">
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Cognome</th>
+                                    <th>Email</th>
+                                    <th>Password</th>
+                                    <th>Ruolo</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin fa-2x mb-2 d-block"></i>
+                                        Caricamento...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationDipendenti" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+      <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- PocketBase Service -->
+    <script src="pocketbase-service.js?v=4"></script>
+    
+    <!-- App JS -->
+    <script src="app.js?v=4"></script>
+</body>
+</html>
