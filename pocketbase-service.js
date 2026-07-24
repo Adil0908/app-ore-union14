@@ -1,19 +1,21 @@
 // ============================================================
-// POCKETBASE SERVICE - CON URL FISSO HTTPS
+// POCKETBASE SERVICE - URL FISSO HTTPS
 // ============================================================
 
 class PocketBaseService {
     constructor() {
-        // 🔥 USA URL FISSO PER IL DOMINIO PUBBLICO
+        // 🔥 URL FISSO PER IL DOMINIO PUBBLICO
         const url = 'https://app-ore-union14.appcomcloud.net';
         
         console.log('🔗 PocketBase URL FISSO:', url);
         
         this.pb = new PocketBase(url);
         this.currentUser = null;
+        
+        // Disabilita auto-cancellazione
         this.pb.autoCancellation(false);
         
-        console.log('✅ PocketBase Service CREATO con URL:', this.pb.baseURL);
+        console.log('✅ PocketBase Service CREATO con URL:', this.pb.baseUrl);
     }
 
     async login(email, password) {
@@ -163,6 +165,7 @@ class PocketBaseService {
     }
 }
 
-// 🔥 CREA L'ISTANZA GLOBALE CON URL FISSO
+// 🔥 CREA L'ISTANZA GLOBALE
 const pbService = new PocketBaseService();
-console.log('✅ PocketBase Service CREATO con URL:', pbService.pb.baseURL);
+console.log('✅ pbService disponibile');
+console.log('✅ pbService.pb.baseUrl:', pbService.pb.baseUrl);
