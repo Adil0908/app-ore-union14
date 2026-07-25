@@ -1259,9 +1259,13 @@ async mostraApplicazione() {
             await this.aggiornaTabellaOreLavorate();
             e.target.reset();
             
-            const oggi = new Date().toISOString().split('T')[0];
-            document.getElementById('oreData').value = oggi;
-            await this.aggiornaVisualizzazioneFasce(oggi);
+            // 🔥 IMPOSTA LA DATA CORRETTAMENTE DOPO IL RESET
+        const oggi = new Date().toISOString().split('T')[0];
+        const dataInput = document.getElementById('oreData');
+        if (dataInput) {
+            dataInput.value = oggi;
+        }
+        await this.aggiornaVisualizzazioneFasce(oggi)
 
         } catch (error) {
             console.error('Errore salvataggio ore:', error);
@@ -1275,11 +1279,13 @@ async mostraApplicazione() {
         }
     }
 
-   getOreFormData() {
+ getOreFormData() {
     const nomeCompleto = stateManager.currentUser.name.split(' ');
-    // 🔥 PRENDI LA DATA COSÌ COM'È DAL CAMPO INPUT (YYYY-MM-DD)
-    const data = document.getElementById('oreData').value;
     
+    // 🔥 PRENDI LA DATA DIRETTAMENTE DAL CAMPO INPUT (YYYY-MM-DD)
+    const dataInput = document.getElementById('oreData');
+    const data = dataInput ? dataInput.value : new Date().toISOString().split('T')[0];
+     
     return {
         commessa: document.getElementById('oreCommessa').value,
         nomeDipendente: nomeCompleto[0],
@@ -4337,7 +4343,7 @@ async handleCommessaForm(e) {
             URL.revokeObjectURL(link.href);
 
             localStorage.setItem('ultimoBackup', JSON.stringify({
-                data: new Date().toISOString(),
+                data: document.getElementById('oreData').value,
                 utente: stateManager.currentUser?.email
             }));
 
