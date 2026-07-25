@@ -1270,20 +1270,22 @@ async mostraApplicazione() {
         }
     }
 
-    getOreFormData() {
-        const nomeCompleto = stateManager.currentUser.name.split(' ');
-        return {
-            commessa: document.getElementById('oreCommessa').value,
-            nomeDipendente: nomeCompleto[0],
-            cognomeDipendente: nomeCompleto.slice(1).join(' '),
-            data: document.getElementById('oreData').value,
-            oraInizio: Utils.arrotondaAlQuartoDora(document.getElementById('oreInizio').value),
-            oraFine: Utils.arrotondaAlQuartoDora(document.getElementById('oreFine').value),
-            descrizione: document.getElementById('oreDescrizione').value,
-            nonConformita: document.getElementById('nonConformita').checked,
-            emailDipendente: stateManager.currentUser.email
-        };
-    }
+   getOreFormData() {
+    const nomeCompleto = stateManager.currentUser.name.split(' ');
+    const data = document.getElementById('oreData').value; // Già in formato YYYY-MM-DD
+    
+    return {
+        commessa: document.getElementById('oreCommessa').value,
+        nomeDipendente: nomeCompleto[0],
+        cognomeDipendente: nomeCompleto.slice(1).join(' '),
+        data: data, // 🔥 È già nel formato corretto
+        oraInizio: Utils.arrotondaAlQuartoDora(document.getElementById('oreInizio').value),
+        oraFine: Utils.arrotondaAlQuartoDora(document.getElementById('oreFine').value),
+        descrizione: document.getElementById('oreDescrizione').value,
+        nonConformita: document.getElementById('nonConformita').checked,
+        emailDipendente: stateManager.currentUser.email
+    };
+}
 
     validateOreForm(data) {
         if (!data.commessa) { NotificationService.error('Seleziona una commessa'); return false; }
@@ -1354,8 +1356,8 @@ async mostraApplicazione() {
         }
     }
 
-    async aggiornaVisualizzazioneFasce(data) {
-       console.log('🔄 aggiornaVisualizzazioneFasce chiamato con data:', data);
+  async aggiornaVisualizzazioneFasce(data) {
+    console.log('🔄 aggiornaVisualizzazioneFasce chiamato con data:', data);
     
     const container = document.getElementById('visualizzazioneFasce');
     const fasceElement = document.getElementById('fasceOccupate');
@@ -1367,80 +1369,112 @@ async mostraApplicazione() {
     }
     
     try {
-        const oreGiornata = await this.getFasceOccupateGiornata(data);
-        console.log('📊 Ore trovate:', oreGiornata);
+        // 🔥 NORMALIZZA LA DATA
+        const dataNormalizzata = data; // Già in formato YYYY-MM-DD
+        const oreGiornata = await this.getFasceOccupateGiornata(dataNormalizzata);
         
-        // 🔥 MOSTRA IL CONTAINER
+        console.log('📊 Ore trovate per', dataNormalizzata, ':', oreGiornata);
+        
+        // MOSTRA IL CONTAINER
         container.style.display = 'block';
+        container.style.visibility = 'visible';
+        container.style.opacity = '1';
+        container.style.height = 'auto';
+        container.style.overflow = 'visible';
+        container.style.pointerEvents = 'auto';
+        container.style.padding = '1rem';
+        container.style.margin = '1rem 0';
+        container.style.border = '2px solid #10b981';
+        container.style.borderRadius = '8px';
+        
         fasceElement.innerHTML = '';
         
-        const dataFormattata = Utils.formattaDataItaliana(data);
+        const dataFormattata = Utils.formattaDataItaliana(dataNormalizzata);
         
         if (oreGiornata.length === 0) {
             fasceElement.innerHTML = `
-                <div class="fascia-oraria fascia-libera">
-                    ✅ <strong>${dataFormattata} - Giornata libera</strong>
+                <div style="padding: 10px; background: #d1fae5; border-radius: 6px; border-left: 4px solid #10b981;">
+                    ✅ <strong>${dataFormattata}</strong> - Giornata libera
                 </div>
             `;
+            console.log('✅ Giornata libera mostrata');
             return;
         }
-            
-            const header = document.createElement('div');
-            header.className = 'fasce-header mb-2';
-            header.innerHTML = `
-                <strong>${dataFormattata} - Fasce Orarie Occupate:</strong>
-                <span class="badge bg-secondary">${oreGiornata.length} fascia(e)</span>
+        
+        const header = document.createElement('div');
+        header.className = 'fasce-header mb-2';
+        header.innerHTML = `
+            <strong>${dataFormattata} - Fasce Orarie Occupate:</strong>
+            <span class="badge bg-secondary">${oreGiornata.length} fascia(e)</span>
+        `;
+        fasceElement.appendChild(header);
+        
+        oreGiornata.forEach((ore, index) => {
+            const oreLavorate = Utils.calcolaOreLavorate(ore.oraInizio, ore.oraFine);
+            const div = document.createElement('div');
+            div.className = 'fascia-oraria fascia-occupata';
+            div.style.cssText = 'padding: 10px; margin-bottom: 6px; background: #fee2e2; border-radius: 6px; border-left: 4px solid #dc2626;';
+            div.innerHTML = `
+                <div class="fascia-header">
+                    <span class="fascia-numero">${index + 1}</span>
+                    ⏰ <strong>${ore.oraInizio} - ${ore.oraFine}</strong>
+                    <span class="fascia-ore">(${Utils.formattaOreDecimali(oreLavorate)} ore)</span>
+                </div>
+                <div class="fascia-dettagli" style="font-size: 0.85rem; color: #475569; margin-top: 4px;">
+                    <strong>Commessa:</strong> ${Utils.escapeHtml(ore.commessa)}<br>
+                    <strong>Descrizione:</strong> ${Utils.escapeHtml(ore.descrizione || '-')}
+                    ${ore.nonConformita ? '<br><span class="badge bg-warning text-dark">⚠️ Non Conformità</span>' : ''}
+                </div>
             `;
-            fasceElement.appendChild(header);
-            
-            oreGiornata.forEach((ore, index) => {
-                const oreLavorate = Utils.calcolaOreLavorate(ore.oraInizio, ore.oraFine);
-                const div = document.createElement('div');
-                div.className = 'fascia-oraria fascia-occupata';
-                div.innerHTML = `
-                    <div class="fascia-header">
-                        <span class="fascia-numero">${index + 1}</span>
-                        ⏰ <strong>${ore.oraInizio} - ${ore.oraFine}</strong>
-                        <span class="fascia-ore">(${Utils.formattaOreDecimali(oreLavorate)} ore)</span>
-                    </div>
-                    <div class="fascia-dettagli">
-                        <strong>Commessa:</strong> ${Utils.escapeHtml(ore.commessa)}<br>
-                        <strong>Descrizione:</strong> ${Utils.escapeHtml(ore.descrizione)}
-                        ${ore.nonConformita ? '<br><span class="badge bg-warning text-dark">⚠️ Non Conformità</span>' : ''}
-                    </div>
-                `;
-                fasceElement.appendChild(div);
-            });
-            
-            const totale = oreGiornata.reduce((sum, ore) => 
-                sum + Utils.calcolaOreLavorate(ore.oraInizio, ore.oraFine), 0
-            );
-            
-            const footer = document.createElement('div');
-            footer.className = 'fasce-footer mt-2';
-            footer.innerHTML = `<strong>Totale giornata:</strong> ${Utils.formattaOreDecimali(totale)} ore`;
-            fasceElement.appendChild(footer);
-            
-            this.creaTimelineGiornata(oreGiornata);
-            
-        } catch (error) {
-            console.error('Errore aggiornamento fasce:', error);
-            fasceElement.innerHTML = `<div class="alert alert-danger">❌ Errore nel caricamento delle fasce orarie</div>`;
-        }
+            fasceElement.appendChild(div);
+        });
+        
+        const totale = oreGiornata.reduce((sum, ore) => 
+            sum + Utils.calcolaOreLavorate(ore.oraInizio, ore.oraFine), 0
+        );
+        
+        const footer = document.createElement('div');
+        footer.className = 'fasce-footer mt-2';
+        footer.style.cssText = 'padding: 8px; background: #e2e8f0; border-radius: 6px; font-weight: bold;';
+        footer.innerHTML = `<strong>Totale giornata:</strong> ${Utils.formattaOreDecimali(totale)} ore`;
+        fasceElement.appendChild(footer);
+        
+        this.creaTimelineGiornata(oreGiornata);
+        
+    } catch (error) {
+        console.error('❌ Errore aggiornamento fasce:', error);
+        fasceElement.innerHTML = `<div class="alert alert-danger">❌ Errore nel caricamento delle fasce orarie</div>`;
     }
+}
 
     async getFasceOccupateGiornata(data) {
-        try {
-            const tutteLeOre = await this.pbService.getCollection("oreLavorate");
-            const nome = stateManager.currentUser.name.split(' ')[0];
-            return tutteLeOre.filter(ore => 
-                ore.data === data && 
-                ore.nomeDipendente === nome
-            ).sort((a, b) => a.oraInizio.localeCompare(b.oraInizio));
-        } catch {
-            return [];
-        }
+    try {
+        const tutteLeOre = await this.pbService.getCollection("oreLavorate");
+        const nome = stateManager.currentUser.name.split(' ')[0];
+        
+        // 🔥 NORMALIZZA LA DATA DI CONFRONTO
+        const dataNormalizzata = data; // Già in formato YYYY-MM-DD
+        
+        console.log('🔍 Cerco ore per data:', dataNormalizzata);
+        console.log('📊 Tutte le ore:', tutteLeOre);
+        
+        const oreFiltrate = tutteLeOre.filter(ore => {
+            // 🔥 NORMALIZZA LA DATA DEL RECORD
+            const dataRecord = ore.data ? ore.data.split('T')[0] : '';
+            const match = dataRecord === dataNormalizzata && ore.nomeDipendente === nome;
+            if (match) {
+                console.log('✅ Trovata corrispondenza:', ore);
+            }
+            return match;
+        });
+        
+        console.log('📊 Ore filtrate:', oreFiltrate);
+        return oreFiltrate.sort((a, b) => a.oraInizio.localeCompare(b.oraInizio));
+    } catch (error) {
+        console.error('❌ Errore getFasceOccupateGiornata:', error);
+        return [];
     }
+}
 
     creaTimelineGiornata(oreOccupate) {
         const container = document.getElementById('fasceOccupate');
