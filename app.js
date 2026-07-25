@@ -90,15 +90,20 @@ const Utils = {
         return `${String(oF).padStart(2, "0")}:${String(mF).padStart(2, "0")}`;
     },
 
-    formattaDataItaliana(dataString) {
-        if (!dataString) return 'N/D';
-        try {
-            const data = new Date(dataString + 'T00:00:00');
-            if (isNaN(data.getTime())) return 'N/D';
-            const mesi = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-            return `${data.getDate()} ${mesi[data.getMonth()]} ${data.getFullYear()}`;
-        } catch { return 'N/D'; }
-    },
+   formattaDataItaliana(dataString) {
+    if (!dataString) return 'N/D';
+    try {
+        // 🔥 SE LA DATA CONTIENE 'T', PRENDI SOLO LA PARTE PRIMA
+        let dataPulita = dataString;
+        if (dataString.includes('T')) {
+            dataPulita = dataString.split('T')[0];
+        }
+        const data = new Date(dataPulita + 'T00:00:00');
+        if (isNaN(data.getTime())) return 'N/D';
+        const mesi = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+        return `${data.getDate()} ${mesi[data.getMonth()]} ${data.getFullYear()}`;
+    } catch { return 'N/D'; }
+},
 
     escapeHtml(str) {
         if (!str) return '';
@@ -1272,13 +1277,14 @@ async mostraApplicazione() {
 
    getOreFormData() {
     const nomeCompleto = stateManager.currentUser.name.split(' ');
-    const data = document.getElementById('oreData').value; // Già in formato YYYY-MM-DD
+    // 🔥 PRENDI LA DATA COSÌ COM'È DAL CAMPO INPUT (YYYY-MM-DD)
+    const data = document.getElementById('oreData').value;
     
     return {
         commessa: document.getElementById('oreCommessa').value,
         nomeDipendente: nomeCompleto[0],
         cognomeDipendente: nomeCompleto.slice(1).join(' '),
-        data: data, // 🔥 È già nel formato corretto
+        data: data, // 🔥 SALVA COME YYYY-MM-DD
         oraInizio: Utils.arrotondaAlQuartoDora(document.getElementById('oreInizio').value),
         oraFine: Utils.arrotondaAlQuartoDora(document.getElementById('oreFine').value),
         descrizione: document.getElementById('oreDescrizione').value,
@@ -1447,7 +1453,7 @@ async mostraApplicazione() {
     }
 }
 
-    async getFasceOccupateGiornata(data) {
+   async getFasceOccupateGiornata(data) {
     try {
         const tutteLeOre = await this.pbService.getCollection("oreLavorate");
         const nome = stateManager.currentUser.name.split(' ')[0];
@@ -1456,11 +1462,19 @@ async mostraApplicazione() {
         const dataNormalizzata = data; // Già in formato YYYY-MM-DD
         
         console.log('🔍 Cerco ore per data:', dataNormalizzata);
-        console.log('📊 Tutte le ore:', tutteLeOre);
         
         const oreFiltrate = tutteLeOre.filter(ore => {
             // 🔥 NORMALIZZA LA DATA DEL RECORD
-            const dataRecord = ore.data ? ore.data.split('T')[0] : '';
+            let dataRecord = ore.data || '';
+            // Se la data contiene 'T', prendi solo la parte prima
+            if (dataRecord.includes('T')) {
+                dataRecord = dataRecord.split('T')[0];
+            }
+            // Se la data contiene 'Z', rimuovila
+            if (dataRecord.includes('Z')) {
+                dataRecord = dataRecord.replace('Z', '');
+            }
+            
             const match = dataRecord === dataNormalizzata && ore.nomeDipendente === nome;
             if (match) {
                 console.log('✅ Trovata corrispondenza:', ore);
@@ -1468,7 +1482,7 @@ async mostraApplicazione() {
             return match;
         });
         
-        console.log('📊 Ore filtrate:', oreFiltrate);
+        console.log('📊 Ore filtrate:', oreFiltrate.length);
         return oreFiltrate.sort((a, b) => a.oraInizio.localeCompare(b.oraInizio));
     } catch (error) {
         console.error('❌ Errore getFasceOccupateGiornata:', error);
