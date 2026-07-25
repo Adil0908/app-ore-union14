@@ -1,20 +1,17 @@
+
 // ============================================================
-// POCKETBASE SERVICE - URL FISSO HTTPS
+// POCKETBASE SERVICE - VERSIONE 2 (HTTPS FISSO)
 // ============================================================
+
+console.log('🔥🔥🔥 VERSIONE V2 CARICATA!');
 
 class PocketBaseService {
     constructor() {
-        // 🔥 URL FISSO PER IL DOMINIO PUBBLICO
         const url = 'https://app-ore-union14.appcomcloud.net';
-        
         console.log('🔗 PocketBase URL FISSO:', url);
-        
         this.pb = new PocketBase(url);
         this.currentUser = null;
-        
-        // Disabilita auto-cancellazione
         this.pb.autoCancellation(false);
-        
         console.log('✅ PocketBase Service CREATO con URL:', this.pb.baseUrl);
     }
 
