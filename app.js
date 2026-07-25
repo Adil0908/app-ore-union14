@@ -642,6 +642,25 @@ async mostraApplicazione() {
                 oreForm.style.padding = '';
                 oreForm.style.margin = '';
             }
+            // 🔥 AGGIUNGI QUESTE RIGHE PER MOSTRARE LE FASCE ORARIE
+    const fasceContainer = document.getElementById('visualizzazioneFasce');
+    if (fasceContainer) {
+        fasceContainer.style.display = 'block';
+        fasceContainer.style.visibility = 'visible';
+        fasceContainer.style.opacity = '1';
+        fasceContainer.style.pointerEvents = 'auto';
+        fasceContainer.style.height = 'auto';
+        fasceContainer.style.overflow = 'visible';
+        fasceContainer.style.padding = '';
+        fasceContainer.style.margin = '';
+        console.log('✅ Fasce orarie rese visibili');
+    }
+
+    // Nascondi skeleton del form ore
+    const skeleton = document.getElementById('oreFormSkeleton');
+    if (skeleton) {
+        skeleton.style.display = 'none';
+    }
         }
 
         // AGGIORNA UI HEADER
@@ -1336,29 +1355,35 @@ async mostraApplicazione() {
     }
 
     async aggiornaVisualizzazioneFasce(data) {
-        const container = document.getElementById('visualizzazioneFasce');
-        const fasceElement = document.getElementById('fasceOccupate');
+       console.log('🔄 aggiornaVisualizzazioneFasce chiamato con data:', data);
+    
+    const container = document.getElementById('visualizzazioneFasce');
+    const fasceElement = document.getElementById('fasceOccupate');
+    
+    if (!container || !fasceElement || !data) {
+        console.log('⚠️ Container o fasceElement non trovati');
+        if (container) container.style.display = 'none';
+        return;
+    }
+    
+    try {
+        const oreGiornata = await this.getFasceOccupateGiornata(data);
+        console.log('📊 Ore trovate:', oreGiornata);
         
-        if (!container || !fasceElement || !data) {
-            if (container) container.style.display = 'none';
+        // 🔥 MOSTRA IL CONTAINER
+        container.style.display = 'block';
+        fasceElement.innerHTML = '';
+        
+        const dataFormattata = Utils.formattaDataItaliana(data);
+        
+        if (oreGiornata.length === 0) {
+            fasceElement.innerHTML = `
+                <div class="fascia-oraria fascia-libera">
+                    ✅ <strong>${dataFormattata} - Giornata libera</strong>
+                </div>
+            `;
             return;
         }
-        
-        try {
-            const oreGiornata = await this.getFasceOccupateGiornata(data);
-            container.style.display = 'block';
-            fasceElement.innerHTML = '';
-            
-            const dataFormattata = Utils.formattaDataItaliana(data);
-            
-            if (oreGiornata.length === 0) {
-                fasceElement.innerHTML = `
-                    <div class="fascia-oraria fascia-libera">
-                        ✅ <strong>${dataFormattata} - Giornata libera</strong>
-                    </div>
-                `;
-                return;
-            }
             
             const header = document.createElement('div');
             header.className = 'fasce-header mb-2';
