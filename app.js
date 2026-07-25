@@ -2965,9 +2965,9 @@ async handleCommessaForm(e) {
     async aggiornaMonitorCommesse() {
         try {
             const [commesse, tutteLeOre] = await Promise.all([
-                this.pbService.getCollection("commesse"),
-                this.pbService.getCollection("oreLavorate")
-            ]);
+    this.pbService.getCollection("commesse"),
+    this.pbService.getCollection("oreLavorate")
+]);
 
             const filtroNome = document.getElementById('filtroNomeCommessa')?.value.trim() || '';
             const filtroStato = document.getElementById('filtroCommessaMonitor')?.value || '';
@@ -4407,7 +4407,7 @@ async handleCommessaForm(e) {
                 filtri.giorno = oggi.split('-')[2];
             }
             
-            dati = await this.firebaseService.getOreLavorateFiltrate(filtri);
+            dati = await this.pbService.getOreLavorateFiltrate(filtri);
             fonteDati = 'caricati';
         }
 
@@ -4725,7 +4725,7 @@ async handleCommessaForm(e) {
                 return;
             }
 
-            const dipendenti = await this.firebaseService.getCollection("dipendenti");
+            const dipendenti = await this.pbService.getCollection("dipendenti");
             if (!dipendenti || dipendenti.length === 0) {
                 NotificationService.warning('Nessun dipendente trovato');
                 return;
@@ -4779,9 +4779,9 @@ async handleCommessaForm(e) {
 
         // 🔥 RECUPERA I DATI CON GLI STESSI FILTRI DEL MONITORAGGIO
         const [commesse, tutteLeOre] = await Promise.all([
-            this.firebaseService.getCollection("commesse"),
-            this.firebaseService.getCollection("oreLavorate")
-        ]);
+    this.pbService.getCollection("commesse"),
+    this.pbService.getCollection("oreLavorate")
+]);;
 
         // 🔥 APPLICA GLI STESSI FILTRI DELLA TABELLA
         const filtroNome = document.getElementById('filtroNomeCommessa')?.value?.trim() || '';
