@@ -2221,52 +2221,45 @@ async handleDipendentiForm(e) {
             return;
         }
 
-        try {
-            // 1. CREA L'UTENTE NELLA COLLECTION 'users' DI POCKETBASE
-            const userData = {
-                email: email,
-                password: password,
-                passwordConfirm: password,
-                name: nome + ' ' + cognome
-            };
-            
-            console.log('📝 Creazione utente in PocketBase:', userData);
-            
-            const newUser = await this.pbService.pb.collection('users').create(userData);
-            console.log('✅ Utente creato in PocketBase, ID:', newUser.id);
-            
-            // 🔥 2. SALVA I DETTAGLI NELLA COLLECTION 'dipendenti' CON IL userId
-            const dipData = {
-                userId: newUser.id,  // 🔥 QUESTO È IL CAMPO IMPORTANTE!
-                nome: nome,
-                cognome: cognome,
-                email: email,
-                password: password,
-                ruolo: ruolo,
-                dataCreazione: new Date().toISOString()
-            };
-            
-            console.log('📝 Dati dipendente da salvare:', dipData);
-            
-            await this.pbService.addDocument('dipendenti', dipData);
-            
-            NotificationService.success(`Dipendente aggiunto con successo! (Ruolo: ${ruolo})`);
-            await this.aggiornaTabellaDipendenti();
-            e.target.reset();
-            // Dopo aver creato l'utente
-document.getElementById('dipendenteUserId').value = newUser.id;
-        } catch (pbError) {
-            console.error('❌ Errore PocketBase:', pbError);
-            if (pbError.message && pbError.message.includes('email')) {
-                NotificationService.error('Email già utilizzata da un altro utente');
-            } else {
-                NotificationService.error('Errore nella creazione: ' + (pbError.message || 'Errore sconosciuto'));
-            }
-        }
+        // 🔥 1. CREA L'UTENTE NELLA COLLECTION 'users'
+        const userData = {
+            email: email,
+            password: password,
+            passwordConfirm: password,
+            name: nome + ' ' + cognome
+        };
+
+        console.log('📝 Creazione utente in PocketBase:', userData);
+
+        const newUser = await this.pbService.pb.collection('users').create(userData);
+        console.log('✅ Utente creato in PocketBase, ID:', newUser.id);
+
+        // 🔥 2. SALVA I DETTAGLI NELLA COLLECTION 'dipendenti'
+        const dipData = {
+            userId: newUser.id,
+            nome: nome,
+            cognome: cognome,
+            email: email,
+            ruolo: ruolo
+        };
+
+        console.log('📝 Dati dipendente da salvare:', dipData);
+
+        // 🔥 USA pb DIRETTAMENTE
+        const dipRecord = await this.pbService.pb.collection('dipendenti').create(dipData);
+        console.log('✅ Dipendente creato in dipendenti:', dipRecord.id);
+
+        NotificationService.success(`Dipendente aggiunto con successo! (Ruolo: ${ruolo})`);
+        await this.aggiornaTabellaDipendenti();
+        e.target.reset();
 
     } catch (error) {
         console.error('❌ Errore aggiunta dipendente:', error);
-        NotificationService.error('Errore durante l\'aggiunta: ' + error.message);
+        if (error.message && error.message.includes('email')) {
+            NotificationService.error('Email già utilizzata da un altro utente');
+        } else {
+            NotificationService.error('Errore durante l\'aggiunta: ' + (error.message || 'Errore sconosciuto'));
+        }
     }
 }
 
@@ -4371,9 +4364,326 @@ async handleCommessaForm(e) {
     // ============================================================
 
     async generaPDFFiltrato() {
-        // ... (mantieni il codice esistente)
-        // È troppo lungo per essere ripetuto qui, ma va mantenuto invariato
+    // 🔥 IMPEDISCI GENERAZIONI MULTIPLE
+    if (this._generazionePDFInCorso) {
+        console.log('⚠️ [PDF] Generazione già in corso, salto...');
+        return;
     }
+    
+    this._generazionePDFInCorso = true;
+    
+    try {
+        if (typeof window.jspdf === 'undefined') {
+            await this.caricaLibreriePDF();
+        }
+
+        const { jsPDF } = window.jspdf;
+        if (!jsPDF) {
+            NotificationService.error('Librerie PDF non disponibili');
+            this._generazionePDFInCorso = false;
+            return;
+        }
+
+        // 🔥 1. PRENDI I DATI CORRETTI
+        let dati = [];
+        let fonteDati = '';
+        
+        if (stateManager.datiFiltrati && stateManager.datiFiltrati.length > 0) {
+            dati = stateManager.datiFiltrati.slice();
+            fonteDati = 'filtrati e ordinati';
+        } else if (stateManager.datiTotali.oreLavorate && stateManager.datiTotali.oreLavorate.length > 0) {
+            dati = stateManager.datiTotali.oreLavorate.slice();
+            fonteDati = 'tutti';
+        } else {
+            const filtri = this.getFiltriOreAttivi();
+            const hasFiltri = filtri.commessa || filtri.dipendente || 
+                             filtri.anno || filtri.mese || filtri.giorno || 
+                             filtri.nonConformita;
+            
+            if (!hasFiltri) {
+                const oggi = new Date().toISOString().split('T')[0];
+                filtri.anno = oggi.split('-')[0];
+                filtri.mese = oggi.split('-')[1];
+                filtri.giorno = oggi.split('-')[2];
+            }
+            
+            dati = await this.firebaseService.getOreLavorateFiltrate(filtri);
+            fonteDati = 'caricati';
+        }
+
+        if (!dati || dati.length === 0) {
+            NotificationService.warning('Nessun dato da esportare');
+            this._generazionePDFInCorso = false;
+            return;
+        }
+
+        // 🔥 2. ORDINA I DATI
+        if (!stateManager.datiFiltrati || stateManager.datiFiltrati.length === 0) {
+            dati.sort((a, b) => {
+                if (a.data !== b.data) return b.data.localeCompare(a.data);
+                if (a.commessa !== b.commessa) return a.commessa.localeCompare(b.commessa, 'it');
+                return a.oraInizio.localeCompare(b.oraInizio);
+            });
+        }
+
+        // 🔥 3. CALCOLA STATISTICHE
+        const totaleOre = this.calcolaTotaleGenerale(dati);
+        const giorniUnici = new Set(dati.map(o => o.data)).size;
+        const dipendentiUnici = new Set(dati.map(o => `${o.nomeDipendente} ${o.cognomeDipendente}`)).size;
+        const nonConformita = dati.filter(o => o.nonConformita).length;
+        const commesseUniche = new Set(dati.map(o => o.commessa)).size;
+
+        // 🔥 4. PDF - ORIENTAMENTO LANDSCAPE PER PIÙ SPAZIO
+        const doc = new jsPDF({ 
+            orientation: 'landscape', 
+            unit: 'mm', 
+            format: 'a4' 
+        });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        
+        // ============================================
+        // 5. INTESTAZIONE
+        // ============================================
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, pageWidth, 32, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text('📋 REPORT ORE LAVORATE', pageWidth / 2, 14, { align: 'center' });
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Generato il: ${new Date().toLocaleString('it-IT')}`, pageWidth / 2, 22, { align: 'center' });
+        doc.text(`Record: ${dati.length}  •  ${fonteDati}`, pageWidth / 2, 28, { align: 'center' });
+
+        // ============================================
+        // 6. STATISTICHE RIASSUNTIVE
+        // ============================================
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        
+        const statsY = 38;
+        doc.setFillColor(241, 245, 249);
+        doc.roundedRect(10, statsY, pageWidth - 20, 20, 2, 2, 'F');
+        
+        doc.setFont('helvetica', 'normal');
+        const stats = [
+            { label: '📅 Giorni Lavorati', value: giorniUnici },
+            { label: '👥 Dipendenti', value: dipendentiUnici },
+            { label: '📋 Commesse', value: commesseUniche },
+            { label: '⏱️ Ore Totali', value: Utils.formattaOreDecimali(totaleOre) },
+            { label: '⚠️ Non Conformità', value: nonConformita },
+            { label: '📊 Media/Giorno', value: giorniUnici > 0 ? Utils.formattaOreDecimali(totaleOre / giorniUnici) : '0:00' }
+        ];
+
+        const colWidth = (pageWidth - 20) / stats.length;
+        stats.forEach((stat, index) => {
+            const x = 10 + (index * colWidth);
+            doc.text(stat.label, x + 2, statsY + 6);
+            doc.setFont('helvetica', 'bold');
+            doc.text(stat.value.toString(), x + 2, statsY + 15);
+            doc.setFont('helvetica', 'normal');
+        });
+
+        // ============================================
+        // 7. TABELLA ESTESA CON DESCRIZIONI COMPLETE
+        // ============================================
+        
+        // Prepara i dati con descrizioni complete (senza troncamento)
+        const tableData = dati.map(ore => {
+            const oreLav = Utils.calcolaOreLavorate(ore.oraInizio, ore.oraFine);
+            const dataFormattata = Utils.formattaDataItaliana(ore.data);
+            const nomeCompleto = `${ore.nomeDipendente || ''} ${ore.cognomeDipendente || ''}`.trim() || '-';
+            
+            // 🔥 DESCRIZIONE COMPLETA (senza tagli)
+            const descrizione = ore.descrizione || '-';
+            
+            return [
+                ore.commessa || '-',
+                nomeCompleto,
+                dataFormattata || '-',
+                ore.oraInizio || '-',
+                ore.oraFine || '-',
+                descrizione,  // 🔥 DESCRIZIONE COMPLETA
+                ore.nonConformita ? '⚠️ Sì' : '✓ No',
+                Utils.formattaOreDecimali(oreLav)
+            ];
+        });
+
+        // Aggiungi riga totale
+        tableData.push([
+            'TOTALE GENERALE',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            Utils.formattaOreDecimali(totaleOre)
+        ]);
+
+        // 🔥 CALCOLA LARGHEZZE COLONNE PER SFRUTTARE TUTTO IL FOGLIO
+        const marginX = 8;
+        const tableWidth = pageWidth - (marginX * 2);
+        
+        // Distribuzione percentuale delle colonne
+        const colWidths = {
+            0: 22,   // Commessa
+            1: 24,   // Dipendente
+            2: 18,   // Data
+            3: 14,   // Inizio
+            4: 14,   // Fine
+            5: 55,   // 🔥 DESCRIZIONE (la più larga!)
+            6: 16,   // NC
+            7: 18    // Ore
+        };
+        
+        // Verifica che la somma non superi la larghezza disponibile
+        let totalColWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
+        if (totalColWidth > tableWidth) {
+            // Riduci proporzionalmente la descrizione
+            const diff = totalColWidth - tableWidth;
+            colWidths[5] = Math.max(30, colWidths[5] - diff);
+        }
+
+        doc.autoTable({
+            startY: statsY + 26,
+            head: [['Commessa', 'Dipendente', 'Data', 'Inizio', 'Fine', 'Descrizione', 'NC', 'Ore']],
+            body: tableData,
+            theme: 'grid',
+            styles: { 
+                fontSize: 7, 
+                cellPadding: 2.5,
+                valign: 'middle',
+                lineWidth: 0.1
+            },
+            headStyles: { 
+                fillColor: [15, 23, 42], 
+                textColor: [255, 255, 255],
+                fontSize: 8,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            columnStyles: {
+                0: { cellWidth: colWidths[0], fontStyle: 'bold', halign: 'left' },
+                1: { cellWidth: colWidths[1], halign: 'left' },
+                2: { cellWidth: colWidths[2], halign: 'center' },
+                3: { cellWidth: colWidths[3], halign: 'center' },
+                4: { cellWidth: colWidths[4], halign: 'center' },
+                5: { 
+                    cellWidth: colWidths[5], 
+                    halign: 'left',
+                    fontSize: 6.5,  // 🔥 FONT PIÙ PICCOLO PER LA DESCRIZIONE
+                    cellPadding: 2
+                },
+                6: { cellWidth: colWidths[6], halign: 'center' },
+                7: { cellWidth: colWidths[7], halign: 'center', fontStyle: 'bold' }
+            },
+            didParseCell: (data) => {
+                // Evidenzia la riga totale
+                if (data.row.index === tableData.length - 1) {
+                    data.cell.styles.fillColor = [15, 23, 42];
+                    data.cell.styles.textColor = [255, 255, 255];
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fontSize = 7.5;
+                }
+                // Evidenzia le non conformità
+                if (data.column.index === 6 && data.cell.raw === '⚠️ Sì') {
+                    data.cell.styles.textColor = [234, 179, 8];
+                    data.cell.styles.fontStyle = 'bold';
+                }
+                // Colora le ore in base al valore
+                if (data.column.index === 7 && data.row.index < tableData.length - 1) {
+                    const oreStr = data.cell.raw;
+                    if (oreStr) {
+                        const ore = parseFloat(oreStr.replace(':', '.'));
+                        if (ore > 8) {
+                            data.cell.styles.textColor = [220, 38, 38];
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (ore >= 6) {
+                            data.cell.styles.textColor = [22, 163, 74];
+                        }
+                    }
+                }
+                // 🔥 PERMETTI IL WRAPPING DEL TESTO NELLA DESCRIZIONE
+                if (data.column.index === 5) {
+                    data.cell.styles.cellWidth = 'auto';
+                }
+            },
+            // 🔥 PERMETTI RIGHE PIÙ ALTE PER DESCRIZIONI LUNGHE
+            didDrawCell: (data) => {
+                if (data.column.index === 5 && data.cell.raw && data.cell.raw.length > 30) {
+                    // La riga si adatterà automaticamente all'altezza del testo
+                }
+            }
+        });
+
+        // ============================================
+        // 8. PIÈ DI PAGINA ESTESO
+        // ============================================
+        const finalY = Math.min(doc.lastAutoTable.finalY + 10, pageHeight - 20);
+        
+        doc.setFillColor(241, 245, 249);
+        doc.roundedRect(10, finalY, pageWidth - 20, 14, 2, 2, 'F');
+        
+        doc.setFontSize(7);
+        doc.setTextColor(50, 50, 50);
+        doc.text(`📊 Riepilogo: ${dati.length} record • ${Utils.formattaOreDecimali(totaleOre)} ore totali • ${giorniUnici} giorni • ${dipendentiUnici} dipendenti`, 15, finalY + 5);
+        
+        // Legenda estesa
+        doc.setTextColor(100, 100, 100);
+        doc.text('Legenda:', 15, finalY + 10);
+        
+        // Ore > 8h
+        doc.setTextColor(220, 38, 38);
+        doc.text('●', 15 + 20, finalY + 9.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Ore > 8h', 15 + 26, finalY + 10);
+        
+        // Non Conformità
+        doc.setTextColor(234, 179, 8);
+        doc.text('●', 15 + 55, finalY + 9.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Non Conformità', 15 + 61, finalY + 10);
+        
+        // Ore ≥ 6h
+        doc.setTextColor(22, 163, 74);
+        doc.text('●', 15 + 95, finalY + 9.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Ore ≥ 6h', 15 + 101, finalY + 10);
+        
+        // Filtri attivi
+        const filtriAttivi = this.getFiltriAttiviTesto();
+        if (filtriAttivi) {
+            doc.setTextColor(100, 100, 100);
+            doc.text(`🔍 Filtri: ${filtriAttivi}`, 15 + 145, finalY + 10);
+        }
+
+        // Copyright
+        doc.setFontSize(6);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Union14 - Sistema Gestione Ore Lavorative v2.0  •  ${new Date().toLocaleString('it-IT')}`, 
+                pageWidth - 10, finalY + 10, { align: 'right' });
+
+        // ============================================
+        // 9. SALVA PDF
+        // ============================================
+        const nomeFile = `ore_lavorate_${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(nomeFile);
+        
+        NotificationService.success(`📄 PDF generato con ${dati.length} record (${fonteDati})!`);
+
+    } catch (error) {
+        console.error('❌ Errore PDF:', error);
+        NotificationService.error('Errore durante la generazione PDF: ' + error.message);
+    } finally {
+        this._generazionePDFInCorso = false;
+        console.log('✅ [PDF] Generazione completata, flag resettato');
+    }
+}
 
     getFiltriAttiviTesto() {
         const filtri = [];
@@ -4403,20 +4713,281 @@ async handleCommessaForm(e) {
         return filtri.length > 0 ? filtri.join(' • ') : '';
     }
 
-    async generaPDFRubricaDipendenti() {
-        // ... (mantieni il codice esistente)
+      async generaPDFRubricaDipendenti() {
+        try {
+            if (typeof window.jspdf === 'undefined') {
+                await this.caricaLibreriePDF();
+            }
+
+            const { jsPDF } = window.jspdf;
+            if (!jsPDF) {
+                NotificationService.error('Librerie PDF non disponibili');
+                return;
+            }
+
+            const dipendenti = await this.firebaseService.getCollection("dipendenti");
+            if (!dipendenti || dipendenti.length === 0) {
+                NotificationService.warning('Nessun dipendente trovato');
+                return;
+            }
+
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            
+            doc.setFontSize(20);
+            doc.setTextColor(37, 99, 235);
+            doc.text('RUBRICA DIPENDENTI', 105, 20, { align: 'center' });
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`Generato il: ${new Date().toLocaleString('it-IT')}`, 105, 28, { align: 'center' });
+            doc.text(`Totale: ${dipendenti.length} dipendenti`, 105, 34, { align: 'center' });
+
+            const tableData = dipendenti.map(d => [
+                `${d.nome} ${d.cognome}`,
+                d.email,
+                d.ruolo || 'dipendente'
+            ]);
+
+            doc.autoTable({
+                startY: 40,
+                head: [['Nome Completo', 'Email', 'Ruolo']],
+                body: tableData,
+                theme: 'grid',
+                styles: { fontSize: 9, cellPadding: 4 },
+                headStyles: { fillColor: [37, 99, 235], textColor: 255 }
+            });
+
+            doc.save(`rubrica_dipendenti_${new Date().toISOString().split('T')[0]}.pdf`);
+            NotificationService.success('PDF rubrica generato con successo!');
+
+        } catch (error) {
+            console.error('Errore PDF rubrica:', error);
+            NotificationService.error('Errore durante la generazione PDF');
+        }
     }
 
     async generaPDFMonitoraggio() {
-        // ... (mantieni il codice esistente)
+    try {
+        if (typeof window.jspdf === 'undefined') {
+            await this.caricaLibreriePDF();
+        }
+
+        const { jsPDF } = window.jspdf;
+        if (!jsPDF) {
+            NotificationService.error('Librerie PDF non disponibili');
+            return;
+        }
+
+        // 🔥 RECUPERA I DATI CON GLI STESSI FILTRI DEL MONITORAGGIO
+        const [commesse, tutteLeOre] = await Promise.all([
+            this.firebaseService.getCollection("commesse"),
+            this.firebaseService.getCollection("oreLavorate")
+        ]);
+
+        // 🔥 APPLICA GLI STESSI FILTRI DELLA TABELLA
+        const filtroNome = document.getElementById('filtroNomeCommessa')?.value?.trim() || '';
+        const filtroStato = document.getElementById('filtroCommessaMonitor')?.value || '';
+        const filtroAnno = document.getElementById('filtroAnnoMonitor')?.value || '';
+        const filtroMese = document.getElementById('filtroMeseMonitor')?.value || '';
+        const filtroFatturato = document.getElementById('filtroFatturato')?.value || '';
+
+        let commesseFiltrate = commesse.filter(c => c && c.nomeCommessa);
+
+        // Filtro nome
+        if (filtroNome) {
+            const f = filtroNome.toLowerCase();
+            commesseFiltrate = commesseFiltrate.filter(c => 
+                c.nomeCommessa.toLowerCase().includes(f)
+            );
+        }
+
+        // Filtro stato
+        if (filtroStato === 'attive') {
+            commesseFiltrate = commesseFiltrate.filter(c => c.stato === 'attiva' || !c.stato);
+        } else if (filtroStato === 'concluse') {
+            commesseFiltrate = commesseFiltrate.filter(c => c.stato === 'conclusa');
+        }
+
+        // Filtro anno
+        if (filtroAnno) {
+            commesseFiltrate = commesseFiltrate.filter(c => {
+                const data = c.dataInizio || c.dataCreazione;
+                return data && data.split('-')[0] === filtroAnno;
+            });
+        }
+
+        // Filtro mese
+        if (filtroMese) {
+            commesseFiltrate = commesseFiltrate.filter(c => {
+                const data = c.dataInizio || c.dataCreazione;
+                return data && data.split('-')[1] === filtroMese;
+            });
+        }
+
+        // Filtro fatturato
+        if (filtroFatturato) {
+            commesseFiltrate = commesseFiltrate.filter(c => 
+                (c.fatturato || 'da_fatturare') === filtroFatturato
+            );
+        }
+
+        if (commesseFiltrate.length === 0) {
+            NotificationService.warning('Nessuna commessa trovata con i filtri selezionati');
+            return;
+        }
+
+        // 🔥 CALCOLA LE STATISTICHE PER LE COMMESSE FILTRATE
+        const fornitori = stateManager.datiTotali.fornitori || [];
+        const tableData = [];
+        let totalePreventivo = 0;
+        let totaleCosto = 0;
+        let totaleMargine = 0;
+
+        for (const c of commesseFiltrate) {
+            const stats = this.calcolaStatisticheCommessa(c, tutteLeOre, fornitori);
+            tableData.push([
+                c.nomeCommessa,
+                `€${stats.valorePreventivo.toFixed(2)}`,
+                Utils.formattaOreDecimali(stats.oreLavorateTotali),
+                Utils.formattaOreDecimali(stats.oreNonConformita),
+                stats.hasIntegrazione ? `+${Utils.formattaOreDecimali(stats.oreIntegrazione)}` : '-',
+                `€${stats.costoDipendenti.toFixed(2)}`,
+                stats.hasFornitori ? `€${stats.costiFornitori.toFixed(2)}` : '-',
+                `€${stats.costoTotale.toFixed(2)}`,
+                `${stats.marginePercentuale.toFixed(1)}%`,
+                c.stato === 'attiva' ? 'ATTIVA' : 'CONCLUSA'
+            ]);
+            
+            totalePreventivo += stats.valorePreventivo;
+            totaleCosto += stats.costoTotale;
+            totaleMargine += stats.margineEuro;
+        }
+
+        // 🔥 CREA IL PDF
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+        // Intestazione
+        doc.setFillColor(37, 99, 235);
+        doc.rect(0, 0, 297, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20);
+        doc.text('MONITORAGGIO COMMESSE - DATI FILTRATI', 148, 16, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text(`Generato il: ${new Date().toLocaleString('it-IT')}`, 148, 24, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
+
+        // Info filtri
+        let filtroInfo = '';
+        const filtriAttivi = [];
+        if (filtroNome) filtriAttivi.push(`Commessa: "${filtroNome}"`);
+        if (filtroStato) filtriAttivi.push(`Stato: ${filtroStato === 'attive' ? 'Attive' : 'Concluse'}`);
+        if (filtroAnno) filtriAttivi.push(`Anno: ${filtroAnno}`);
+        if (filtroMese) {
+            const mesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                         'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+            filtriAttivi.push(`Mese: ${mesi[parseInt(filtroMese) - 1]}`);
+        }
+        if (filtroFatturato) {
+            filtriAttivi.push(`Fatturato: ${filtroFatturato === 'fatturato' ? 'Fatturato' : 'Da fatturare'}`);
+        }
+
+        if (filtriAttivi.length > 0) {
+            doc.setFontSize(9);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`Filtri: ${filtriAttivi.join(' • ')}`, 14, 38);
+        }
+
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        doc.text(`Record: ${tableData.length} commesse`, 14, 45);
+
+        // Tabella
+        doc.autoTable({
+            startY: 50,
+            head: [['Commessa', 'Preventivo', 'Ore Lav', 'Ore NC', 'Integr.', 'Costo Dip.', 'Costo Forn.', 'Costo Tot.', 'Margine %', 'Stato']],
+            body: tableData,
+            theme: 'grid',
+            styles: { fontSize: 7, cellPadding: 2 },
+            headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+            columnStyles: {
+                0: { cellWidth: 30 },
+                1: { cellWidth: 20, halign: 'right' },
+                2: { cellWidth: 18, halign: 'center' },
+                3: { cellWidth: 18, halign: 'center' },
+                4: { cellWidth: 16, halign: 'center' },
+                5: { cellWidth: 22, halign: 'right' },
+                6: { cellWidth: 22, halign: 'right' },
+                7: { cellWidth: 22, halign: 'right' },
+                8: { cellWidth: 20, halign: 'right' },
+                9: { cellWidth: 18, halign: 'center' }
+            }
+        });
+
+        // Riepilogo
+        const finalY = doc.lastAutoTable.finalY + 10;
+        doc.setFontSize(10);
+        doc.text(`📊 Riepilogo (${tableData.length} commesse)`, 14, finalY);
+        doc.text(`Totale Preventivi: €${totalePreventivo.toFixed(2)}`, 14, finalY + 6);
+        doc.text(`Totale Costi: €${totaleCosto.toFixed(2)}`, 14, finalY + 12);
+        doc.text(`Margine Totale: €${totaleMargine.toFixed(2)}`, 14, finalY + 18);
+        doc.text(`Margine Medio: ${(totalePreventivo > 0 ? (totaleMargine / totalePreventivo * 100) : 0).toFixed(1)}%`, 14, finalY + 24);
+
+        // Salva
+        const nomeFile = `monitoraggio_filtrato_${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(nomeFile);
+        
+        NotificationService.success(`PDF generato con ${tableData.length} commesse filtrate!`);
+
+    } catch (error) {
+        console.error('❌ Errore PDF monitoraggio:', error);
+        NotificationService.error('Errore durante la generazione PDF: ' + error.message);
     }
+}
 
     async testGenerazionePDF() {
-        // ... (mantieni il codice esistente)
+        try {
+            if (typeof window.jspdf === 'undefined') {
+                await this.caricaLibreriePDF();
+            }
+
+            const { jsPDF } = window.jspdf;
+            if (!jsPDF) {
+                NotificationService.error('jsPDF non disponibile');
+                return;
+            }
+
+            const doc = new jsPDF();
+            doc.text('Test PDF - ' + new Date().toLocaleString(), 20, 20);
+            doc.text('Se vedi questo, le librerie PDF funzionano!', 20, 30);
+            doc.save('test_pdf.pdf');
+            
+            NotificationService.success('Test PDF completato con successo!');
+        } catch (error) {
+            console.error('Errore test PDF:', error);
+            NotificationService.error('Errore nel test PDF');
+        }
     }
 
-    async caricaLibreriePDF() {
-        // ... (mantieni il codice esistente)
+      async caricaLibreriePDF() {
+        return new Promise((resolve) => {
+            if (typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF) {
+                resolve();
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            script.onload = () => {
+                setTimeout(() => {
+                    const autoScript = document.createElement('script');
+                    autoScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js';
+                    autoScript.onload = resolve;
+                    autoScript.onerror = resolve;
+                    document.head.appendChild(autoScript);
+                }, 100);
+            };
+            script.onerror = resolve;
+            document.head.appendChild(script);
+        });
     }
 
     refreshTutteLeTabelle() {
