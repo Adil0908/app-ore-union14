@@ -4295,12 +4295,333 @@ async handleCommessaForm(e) {
     }
 
     async generaPDFMensile(nomeMese, meseNumero, datiPerDipendente, annoCorrente) {
-        // ... (mantieni il codice esistente per generaPDFMensile)
-        // È troppo lungo per essere ripetuto qui, ma va mantenuto invariato
+    try {
+        // Carica librerie PDF
+        if (typeof window.jspdf === 'undefined') {
+            await this.caricaLibreriePDF();
+        }
+
+        const { jsPDF } = window.jspdf;
+        if (!jsPDF) {
+            NotificationService.error('Librerie PDF non disponibili');
+            return;
+        }
+
+        // Prepara i dati
+        const giorniNelMese = new Date(annoCorrente, meseNumero, 0).getDate();
+        const giorniSettimana = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+        const giorniSettimanaCompleti = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+
+        // Ordina dipendenti per totale (decrescente)
+        const dipendentiOrdinati = Object.entries(datiPerDipendente)
+            .filter(([_, dati]) => dati.totale > 0)
+            .sort((a, b) => b[1].totale - a[1].totale);
+
+        // Calcola totali
+        let totaleGenerale = 0;
+        dipendentiOrdinati.forEach(([_, dati]) => {
+            totaleGenerale += dati.totale;
+        });
+
+        // Determina orientamento pagina
+        const isLandscape = giorniNelMese > 20;
+        const doc = new jsPDF({ 
+            orientation: isLandscape ? 'landscape' : 'portrait', 
+            unit: 'mm', 
+            format: 'a4' 
+        });
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 10;
+        const contentWidth = pageWidth - (margin * 2);
+
+        // ============================================
+        // 1. INTESTAZIONE PRINCIPALE
+        // ============================================
+        
+        // Sfondo header
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, pageWidth, 35, 'F');
+
+        // Titolo
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.text('📊 REPORT MENSILE ORE LAVORATE', pageWidth / 2, 16, { align: 'center' });
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${nomeMese} ${annoCorrente}`, pageWidth / 2, 24, { align: 'center' });
+
+        // Info in basso nell'header
+        doc.setFontSize(9);
+        doc.setTextColor(200, 200, 200);
+        const infoText = `Generato il: ${new Date().toLocaleString('it-IT')}  •  ${dipendentiOrdinati.length} dipendenti  •  ${Utils.formattaOreDecimali(totaleGenerale)} ore totali`;
+        doc.text(infoText, pageWidth / 2, 31, { align: 'center' });
+
+        // ============================================
+        // 2. STATISTICHE RIASSUNTIVE
+        // ============================================
+        
+        let yPos = 42;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+
+        // Calcola statistiche
+        const totaleGiorniLavorati = Object.values(datiPerDipendente).reduce((sum, d) => 
+            sum + d.giorni.filter(o => o > 0).length, 0
+        );
+        const mediaPerDipendente = dipendentiOrdinati.length > 0 ? totaleGenerale / dipendentiOrdinati.length : 0;
+        const mediaGiornaliera = giorniNelMese > 0 ? totaleGenerale / giorniNelMese : 0;
+        const maxOreDipendente = dipendentiOrdinati.length > 0 ? dipendentiOrdinati[0][1].totale : 0;
+        const maxOreNome = dipendentiOrdinati.length > 0 ? dipendentiOrdinati[0][0] : '';
+
+        // Riquadro statistiche
+        doc.setFillColor(241, 245, 249);
+        doc.roundedRect(margin, yPos - 2, contentWidth, 20, 2, 2, 'F');
+        
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        const stats = [
+            { label: '👥 Dipendenti', value: dipendentiOrdinati.length },
+            { label: '⏱️ Ore Totali', value: Utils.formattaOreDecimali(totaleGenerale) },
+            { label: '📊 Media/Dip.', value: Utils.formattaOreDecimali(mediaPerDipendente) },
+            { label: '📅 Media/Giorno', value: Utils.formattaOreDecimali(mediaGiornaliera) },
+            { label: '🏆 Top Performer', value: `${maxOreNome} (${Utils.formattaOreDecimali(maxOreDipendente)}h)` },
+            { label: '📆 Giorni Lavorati', value: totaleGiorniLavorati }
+        ];
+
+        const colWidth = contentWidth / stats.length;
+        stats.forEach((stat, index) => {
+            const x = margin + (index * colWidth);
+            doc.text(stat.label, x + 2, yPos + 5);
+            doc.setFont('helvetica', 'bold');
+            doc.text(stat.value.toString(), x + 2, yPos + 13);
+            doc.setFont('helvetica', 'normal');
+        });
+
+        yPos += 24;
+
+        // ============================================
+        // 3. TABELLA PRINCIPALE
+        // ============================================
+        
+        // Prepara i dati per la tabella
+        const tableData = [];
+        
+        // Intestazione
+        const headerRow = ['Dipendente'];
+        for (let i = 1; i <= giorniNelMese; i++) {
+            const data = new Date(annoCorrente, meseNumero - 1, i);
+            const giornoSett = giorniSettimana[data.getDay()];
+            headerRow.push(`${i} ${giornoSett}`);
+        }
+        headerRow.push('Totale', '%', 'Media/G', 'Giorni');
+        tableData.push(headerRow);
+
+        // Righe dipendenti
+        dipendentiOrdinati.forEach(([dipendente, dati], index) => {
+            const row = [dipendente];
+            const totaleDipendente = dati.totale;
+            const giorniLavorati = dati.giorni.filter(ore => ore > 0).length;
+            const mediaGiornaliera = giorniLavorati > 0 ? totaleDipendente / giorniLavorati : 0;
+            const percentuale = totaleGenerale > 0 ? (totaleDipendente / totaleGenerale) * 100 : 0;
+
+            // Dati giornalieri
+            for (let i = 0; i < giorniNelMese; i++) {
+                const ore = dati.giorni[i] || 0;
+                if (ore > 0) {
+                    row.push(Utils.formattaOreDecimali(ore));
+                } else {
+                    row.push('');
+                }
+            }
+
+            // Totali
+            row.push(Utils.formattaOreDecimali(totaleDipendente));
+            row.push(percentuale.toFixed(1) + '%');
+            row.push(Utils.formattaOreDecimali(mediaGiornaliera));
+            row.push(giorniLavorati);
+            tableData.push(row);
+        });
+
+        // Riga totale
+        const totalRow = ['TOTALE'];
+        let totaliGiorno = [];
+        for (let i = 0; i < giorniNelMese; i++) {
+            let tot = 0;
+            Object.values(datiPerDipendente).forEach(d => {
+                tot += d.giorni[i] || 0;
+            });
+            totaliGiorno.push(tot);
+            totalRow.push(tot > 0 ? Utils.formattaOreDecimali(tot) : '');
+        }
+        const totaleFinale = totaliGiorno.reduce((a, b) => a + b, 0);
+        const mediaFinale = totaleFinale / giorniNelMese;
+        const giorniLavoratiTotali = Object.values(datiPerDipendente).reduce((sum, d) => 
+            sum + d.giorni.filter(o => o > 0).length, 0
+        );
+        
+        totalRow.push(Utils.formattaOreDecimali(totaleFinale));
+        totalRow.push('100%');
+        totalRow.push(Utils.formattaOreDecimali(mediaFinale));
+        totalRow.push(giorniLavoratiTotali);
+        tableData.push(totalRow);
+
+        // ============================================
+        // 4. GENERA LA TABELLA NEL PDF
+        // ============================================
+        
+        // Calcola le larghezze delle colonne
+        const colCount = tableData[0].length;
+        const colWidths = new Array(colCount).fill(contentWidth / colCount);
+        
+        // Colonna dipendente più larga
+        colWidths[0] = Math.min(45, contentWidth * 0.12);
+        
+        // Giorni - dimensioni variabili
+        for (let i = 1; i <= giorniNelMese; i++) {
+            colWidths[i] = Math.min(12, contentWidth * 0.035);
+        }
+        
+        // Colonne finali
+        const startFinal = giorniNelMese + 1;
+        colWidths[startFinal] = Math.min(18, contentWidth * 0.06); // Totale
+        colWidths[startFinal + 1] = Math.min(16, contentWidth * 0.05); // %
+        colWidths[startFinal + 2] = Math.min(18, contentWidth * 0.06); // Media
+        colWidths[startFinal + 3] = Math.min(14, contentWidth * 0.045); // Giorni
+
+        // Calcola altezza riga
+        const rowHeight = 6;
+        const fontSize = 7;
+
+        // Genera la tabella
+        doc.autoTable({
+            startY: yPos,
+            head: [tableData[0]],
+            body: tableData.slice(1),
+            theme: 'grid',
+            styles: {
+                fontSize: fontSize,
+                cellPadding: 1.5,
+                lineWidth: 0.2,
+                valign: 'middle'
+            },
+            headStyles: {
+                fillColor: [15, 23, 42],
+                textColor: [255, 255, 255],
+                fontSize: 6.5,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            columnStyles: {
+                0: { 
+                    fontStyle: 'bold', 
+                    halign: 'left',
+                    cellWidth: colWidths[0]
+                }
+            },
+            didDrawCell: (data) => {
+                // Colora la riga totale
+                if (data.row.index === tableData.length - 2) {
+                    data.cell.styles.fillColor = [15, 23, 42];
+                    data.cell.styles.textColor = [255, 255, 255];
+                    data.cell.styles.fontStyle = 'bold';
+                }
+                
+                // Colora il top performer
+                if (data.row.index === 0 && data.column.index === 0) {
+                    // Aggiungi un'icona al top performer nella prima riga
+                }
+                
+                // Evidenzia le celle con ore > 8
+                if (data.column.index > 0 && data.column.index <= giorniNelMese && data.cell.raw) {
+                    const ore = parseFloat(data.cell.raw.replace(':', '.'));
+                    if (ore > 8) {
+                        data.cell.styles.textColor = [220, 38, 38];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
+            },
+            didParseCell: (data) => {
+                // Allinea al centro le celle dei giorni
+                if (data.column.index > 0 && data.column.index <= giorniNelMese) {
+                    data.cell.styles.halign = 'center';
+                }
+                // Allinea a destra le celle numeriche finali
+                if (data.column.index > giorniNelMese) {
+                    data.cell.styles.halign = 'center';
+                }
+            }
+        });
+
+        // ============================================
+        // 5. PIÈ DI PAGINA
+        // ============================================
+        
+        const finalY = doc.lastAutoTable.finalY + 8;
+        
+        // Legenda
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text('Legenda:', margin, finalY);
+        doc.setTextColor(220, 38, 38);
+        doc.text('●', margin + 18, finalY - 0.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Ore oltre le 8h giornaliere', margin + 23, finalY);
+        
+        // Badge top performer
+        doc.setTextColor(234, 179, 8);
+        doc.text('●', margin + 85, finalY - 0.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Top performer del mese', margin + 90, finalY);
+        
+        // Info copyright
+        doc.setFontSize(6);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Union14 - Sistema Gestione Ore Lavorative v2.0  •  ${new Date().toLocaleString('it-IT')}`, 
+                pageWidth - margin, finalY, { align: 'right' });
+
+        // ============================================
+        // 6. SALVA PDF
+        // ============================================
+        
+        doc.save(`report_mensile_${nomeMese}_${annoCorrente}.pdf`);
+        NotificationService.success('📄 PDF Report generato con successo!');
+
+    } catch (error) {
+        console.error('Errore PDF mensile:', error);
+        NotificationService.error('Errore durante la generazione PDF: ' + error.message);
     }
+}
 
     async scaricaCSV(nomeMese, meseNumero, datiPerDipendente) {
-        // ... (mantieni il codice esistente per scaricaCSV)
+        try {
+            const annoCorrente = new Date().getFullYear();
+            let csv = `Report Ore Lavorate - ${nomeMese} ${annoCorrente}\n`;
+            csv += 'Dipendente,' + Array.from({ length: 31 }, (_, i) => i + 1).join(',') + ',Totale Mensile\n';
+
+            Object.entries(datiPerDipendente).forEach(([dipendente, dati]) => {
+                csv += dipendente + ',' + 
+                       dati.giorni.map(ore => ore > 0 ? Utils.formattaOreDecimali(ore) : '').join(',') + 
+                       ',' + Utils.formattaOreDecimali(dati.totale) + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `ore_${nomeMese}_${annoCorrente}.csv`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            
+            NotificationService.success('CSV scaricato con successo!');
+        } catch (error) {
+            console.error('Errore CSV:', error);
+            NotificationService.error('Errore durante il download CSV');
+        }
     }
 
     // ============================================================
