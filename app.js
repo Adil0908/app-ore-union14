@@ -2808,194 +2808,220 @@ async handleCommessaForm(e) {
         }
     }
 
-    async aggiornaTabellaFornitori() {
-        const tbody = document.querySelector('#fornitoriTable tbody');
-        if (!tbody) {
-            console.error('❌ Tbody fornitori non trovato');
-            return;
-        }
+async aggiornaTabellaFornitori() {
+    const tbody = document.querySelector('#fornitoriTable tbody');
+    if (!tbody) {
+        console.error('❌ Tbody fornitori non trovato');
+        return;
+    }
 
-        try {
-            let fornitori = await this.pbService.getCollection("fornitoriLavorazioni");
-            
-            fornitori.sort((a, b) => {
-                const dataA = a.data || a.dataCreazione || '';
-                const dataB = b.data || b.dataCreazione || '';
-                return dataB.localeCompare(dataA);
-            });
+    try {
+        let fornitori = await this.pbService.getCollection("fornitoriLavorazioni");
+        
+        // 🔥 ORDINA PER DATA (più recenti prima)
+        fornitori.sort((a, b) => {
+            const dataA = a.data || a.dataCreazione || '';
+            const dataB = b.data || b.dataCreazione || '';
+            return dataB.localeCompare(dataA);
+        });
 
-            stateManager.datiTotali.fornitori = fornitori;
-            this.paginazione.fornitori.datiTotali = fornitori;
+        stateManager.datiTotali.fornitori = fornitori;
+        this.paginazione.fornitori.datiTotali = fornitori;
 
-            const datiPagina = this.paginazione.fornitori.getDatiPagina();
-            
-            tbody.innerHTML = '';
+        const datiPagina = this.paginazione.fornitori.getDatiPagina();
+        
+        tbody.innerHTML = '';
 
-            if (datiPagina.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="text-center py-4 text-muted">
-                            <i class="fas fa-truck fa-3x mb-3 d-block"></i>
-                            <h5>Nessuna lavorazione fornitore registrata</h5>
-                            <p class="small">Aggiungi una lavorazione usando il form sopra</p>
-                        </td>
-                    </tr>
-                `;
-            } else {
-                datiPagina.forEach(f => {
-                    const row = document.createElement('tr');
-                    const dataFormattata = f.data ? Utils.formattaDataItaliana(f.data) : '-';
-                    
-                    row.innerHTML = `
-                        <td><strong>${Utils.escapeHtml(f.nomeFornitore)}</strong></td>
-                        <td>${Utils.escapeHtml(f.commessa)}</td>
-                        <td class="text-end"><strong>€ ${(f.costo || 0).toFixed(2)}</strong></td>
-                        <td>${Utils.escapeHtml(f.descrizione || '-')}</td>
-                        <td>${dataFormattata}</td>
-                        <td class="text-center">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button class="btn btn-warning btn-modifica-fornitore" 
-                                        data-id="${f.id}" 
-                                        title="Modifica lavorazione">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-danger btn-elimina-fornitore" 
-                                        data-id="${f.id}" 
-                                        title="Elimina lavorazione">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-
-                    row.querySelector('.btn-modifica-fornitore')?.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        this.modificaLavorazioneFornitore(f.id);
-                    });
-                    
-                    row.querySelector('.btn-elimina-fornitore')?.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        this.eliminaLavorazioneFornitore(f.id);
-                    });
-                });
-
-                const totaleCosti = fornitori.reduce((sum, f) => sum + (parseFloat(f.costo) || 0), 0);
-                const tr = document.createElement('tr');
-                tr.className = 'table-info fw-bold';
-                tr.innerHTML = `
-                    <td colspan="2" class="text-end">TOTALE COSTI FORNITORI</td>
-                    <td class="text-end"><strong>€ ${totaleCosti.toFixed(2)}</strong></td>
-                    <td colspan="3"></td>
-                `;
-                tbody.appendChild(tr);
-            }
-
-            this.paginazione.fornitori.render(fornitori, () => {
-                console.log(`🔄 Callback paginazione fornitori - ricarico`);
-                this.aggiornaTabellaFornitori();
-            });
-
-        } catch (error) {
-            console.error('❌ Errore tabella fornitori:', error);
+        if (datiPagina.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="text-center text-danger py-4">
-                        <i class="fas fa-exclamation-triangle fa-2x mb-2 d-block"></i>
-                        Errore nel caricamento: ${error.message}
-                        <br>
-                        <button class="btn btn-sm btn-primary mt-2" onclick="app.aggiornaTabellaFornitori()">
-                            <i class="fas fa-sync-alt"></i> Riprova
-                        </button>
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        <i class="fas fa-truck fa-3x mb-3 d-block"></i>
+                        <h5>Nessuna lavorazione fornitore registrata</h5>
+                        <p class="small">Aggiungi una lavorazione usando il form sopra</p>
                     </td>
                 </tr>
             `;
-        }
-    }
+        } else {
+            datiPagina.forEach(f => {
+                const row = document.createElement('tr');
+                
+                // 🔥 NORMALIZZA LA DATA PER LA VISUALIZZAZIONE
+                let dataFormattata = '-';
+                if (f.data) {
+                    let dataPulita = f.data;
+                    if (dataPulita.includes('T')) dataPulita = dataPulita.split('T')[0];
+                    if (dataPulita.includes('Z')) dataPulita = dataPulita.replace('Z', '');
+                    dataFormattata = Utils.formattaDataItaliana(dataPulita);
+                }
+                
+                row.innerHTML = `
+                    <td><strong>${Utils.escapeHtml(f.nomeFornitore)}</strong></td>
+                    <td>${Utils.escapeHtml(f.commessa)}</td>
+                    <td class="text-end"><strong>€ ${(f.costo || 0).toFixed(2)}</strong></td>
+                    <td>${Utils.escapeHtml(f.descrizione || '-')}</td>
+                    <td>${dataFormattata}</td>
+                    <td class="text-center">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-warning btn-modifica-fornitore" 
+                                    data-id="${f.id}" 
+                                    title="Modifica lavorazione">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger btn-elimina-fornitore" 
+                                    data-id="${f.id}" 
+                                    title="Elimina lavorazione">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
 
-    async aggiungiLavorazioneFornitore(e) {
-        e.preventDefault();
-        if (this.salvataggioInCorso) return;
-        this.salvataggioInCorso = true;
-
-        try {
-            const nomeFornitore = document.getElementById('fornitoreNome').value.trim();
-            const commessa = document.getElementById('fornitoreCommessa').value;
-            const costo = parseFloat(document.getElementById('fornitoreCosto').value);
-            const descrizione = document.getElementById('fornitoreDescrizione').value.trim();
-            const data = document.getElementById('fornitoreData').value || new Date().toISOString().split('T')[0];
-
-            if (!nomeFornitore || !commessa || isNaN(costo) || costo <= 0) {
-                NotificationService.error('Compila tutti i campi obbligatori');
-                return;
-            }
-
-            await this.pbService.addDocument("fornitoriLavorazioni", {
-                nomeFornitore,
-                commessa,
-                costo,
-                descrizione,
-                data,
-                dataCreazione: new Date().toISOString()
+                row.querySelector('.btn-modifica-fornitore')?.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.modificaLavorazioneFornitore(f.id);
+                });
+                
+                row.querySelector('.btn-elimina-fornitore')?.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.eliminaLavorazioneFornitore(f.id);
+                });
             });
 
-            NotificationService.success('Lavorazione fornitore aggiunta!');
-            document.getElementById('fornitoreForm').reset();
-            await this.caricaFornitori();
-            await this.aggiornaMonitorCommesse();
-            await this.ricaricaDatiOreConFiltri();
-
-        } catch (error) {
-            console.error('Errore aggiunta fornitore:', error);
-            NotificationService.error('Errore durante l\'aggiunta');
-        } finally {
-            this.salvataggioInCorso = false;
+            // Riga totale costi
+            const totaleCosti = fornitori.reduce((sum, f) => sum + (parseFloat(f.costo) || 0), 0);
+            const tr = document.createElement('tr');
+            tr.className = 'table-info fw-bold';
+            tr.innerHTML = `
+                <td colspan="2" class="text-end">TOTALE COSTI FORNITORI</td>
+                <td class="text-end"><strong>€ ${totaleCosti.toFixed(2)}</strong></td>
+                <td colspan="3"></td>
+            `;
+            tbody.appendChild(tr);
         }
+
+        this.paginazione.fornitori.render(fornitori, () => {
+            console.log(`🔄 Callback paginazione fornitori - ricarico`);
+            this.aggiornaTabellaFornitori();
+        });
+
+    } catch (error) {
+        console.error('❌ Errore tabella fornitori:', error);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-danger py-4">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2 d-block"></i>
+                    Errore nel caricamento: ${error.message}
+                    <br>
+                    <button class="btn btn-sm btn-primary mt-2" onclick="app.aggiornaTabellaFornitori()">
+                        <i class="fas fa-sync-alt"></i> Riprova
+                    </button>
+                </td>
+            </tr>
+        `;
     }
+}
 
-    async modificaLavorazioneFornitore(id) {
-        try {
-            const f = await this.pbService.getRecord("fornitoriLavorazioni", id);
-            if (!f) {
-                NotificationService.error('Lavorazione non trovata');
-                return;
-            }
-            
-            const nome = prompt("Nome fornitore:", f.nomeFornitore);
-            if (!nome) return;
-            
-            const commessa = prompt("Commessa:", f.commessa);
-            if (!commessa) return;
-            
-            const costo = parseFloat(prompt("Costo (€):", f.costo));
-            if (isNaN(costo) || costo <= 0) {
-                NotificationService.error('Costo non valido');
-                return;
-            }
-            
-            const descrizione = prompt("Descrizione:", f.descrizione || '');
-            const data = prompt("Data (YYYY-MM-DD):", f.data || '');
+  async aggiungiLavorazioneFornitore(e) {
+    e.preventDefault();
+    if (this.salvataggioInCorso) return;
+    this.salvataggioInCorso = true;
 
-            await this.pbService.updateDocument("fornitoriLavorazioni", id, {
-                nomeFornitore: nome,
-                commessa,
-                costo,
-                descrizione: descrizione || '',
-                data: data || '',
-                dataModifica: new Date().toISOString()
-            });
-
-            NotificationService.success('Lavorazione modificata!');
-            await Promise.all([
-                this.caricaFornitori(),
-                this.aggiornaMonitorCommesse()
-            ]);
-
-        } catch (error) {
-            console.error('Errore modifica:', error);
-            NotificationService.error('Errore durante la modifica');
+    try {
+        const nomeFornitore = document.getElementById('fornitoreNome').value.trim();
+        const commessa = document.getElementById('fornitoreCommessa').value;
+        const costo = parseFloat(document.getElementById('fornitoreCosto').value);
+        const descrizione = document.getElementById('fornitoreDescrizione').value.trim();
+        
+        // 🔥 PRENDI LA DATA DIRETTAMENTE DAL CAMPO INPUT
+        let data = document.getElementById('fornitoreData').value;
+        if (!data) {
+            // Se non c'è data, usa quella di oggi
+            data = new Date().toISOString().split('T')[0];
         }
+        
+        console.log('📝 Data fornitore da salvare:', data);
+
+        if (!nomeFornitore || !commessa || isNaN(costo) || costo <= 0) {
+            NotificationService.error('Compila tutti i campi obbligatori');
+            return;
+        }
+
+        await this.pbService.addDocument("fornitoriLavorazioni", {
+            nomeFornitore: nomeFornitore,
+            commessa: commessa,
+            costo: costo,
+            descrizione: descrizione,
+            data: data, // 🔥 SALVA COME YYYY-MM-DD
+            dataCreazione: new Date().toISOString()
+        });
+
+        NotificationService.success('Lavorazione fornitore aggiunta!');
+        document.getElementById('fornitoreForm').reset();
+        await this.caricaFornitori();
+        await this.aggiornaMonitorCommesse();
+        await this.ricaricaDatiOreConFiltri();
+
+    } catch (error) {
+        console.error('❌ Errore aggiunta fornitore:', error);
+        NotificationService.error('Errore durante l\'aggiunta: ' + error.message);
+    } finally {
+        this.salvataggioInCorso = false;
     }
+}
+
+async modificaLavorazioneFornitore(id) {
+    try {
+        const f = await this.pbService.getRecord("fornitoriLavorazioni", id);
+        if (!f) {
+            NotificationService.error('Lavorazione non trovata');
+            return;
+        }
+        
+        const nome = prompt("Nome fornitore:", f.nomeFornitore);
+        if (!nome) return;
+        
+        const commessa = prompt("Commessa:", f.commessa);
+        if (!commessa) return;
+        
+        const costo = parseFloat(prompt("Costo (€):", f.costo));
+        if (isNaN(costo) || costo <= 0) {
+            NotificationService.error('Costo non valido');
+            return;
+        }
+        
+        const descrizione = prompt("Descrizione:", f.descrizione || '');
+        
+        // 🔥 PRENDI LA DATA E NORMALIZZALA
+        let data = prompt("Data (YYYY-MM-DD):", f.data || '');
+        if (data && data.includes('T')) {
+            data = data.split('T')[0];
+        }
+        if (data && data.includes('Z')) {
+            data = data.replace('Z', '');
+        }
+
+        await this.pbService.updateDocument("fornitoriLavorazioni", id, {
+            nomeFornitore: nome,
+            commessa: commessa,
+            costo: costo,
+            descrizione: descrizione || '',
+            data: data || '',
+            dataModifica: new Date().toISOString()
+        });
+
+        NotificationService.success('Lavorazione modificata!');
+        await Promise.all([
+            this.caricaFornitori(),
+            this.aggiornaMonitorCommesse()
+        ]);
+
+    } catch (error) {
+        console.error('❌ Errore modifica:', error);
+        NotificationService.error('Errore durante la modifica');
+    }
+}
 
     async eliminaLavorazioneFornitore(id) {
         if (!confirm('Sei sicuro di voler eliminare questa lavorazione fornitore?')) return;
