@@ -14,6 +14,21 @@
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <!-- PWA Meta Tags -->
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ore Dipendenti">
+<meta name="theme-color" content="#2563eb">
+
+<!-- PWA Icons -->
+<link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png">
+
+
+
+
 </head>
 <body>
     <!-- Skip Link per Accessibilità -->
@@ -830,5 +845,17 @@
     
     <!-- App JS -->
     <script src="app.js?v=4"></script>
+    <!-- PWA Service Worker -->
+<script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+                console.log('✅ Service Worker registrato:', registration);
+            })
+            .catch((error) => {
+                console.log('❌ Service Worker non registrato:', error);
+            });
+    }
+</script>
 </body>
 </html>
