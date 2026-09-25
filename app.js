@@ -3969,27 +3969,43 @@ async modificaLavorazioneFornitore(id) {
         this.aggiungiSommarioAndamento(dataLavorate, dataPreventivate, annoSelezionato);
     }
 
-    aggiungiSommarioAndamento(lavorate, preventivate, anno) {
-        const container = document.getElementById('summaryAndamento');
-        if (!container) return;
+ aggiungiSommarioAndamento(lavorate, preventivate, anno) {
+    const container = document.getElementById('summaryAndamento');
+    if (!container) return;
 
-        const totLav = lavorate.reduce((a, b) => a + b, 0);
-        const totPrev = preventivate.reduce((a, b) => a + b, 0);
-        const diff = totLav - totPrev;
-        const pct = totPrev > 0 ? (totLav / totPrev) * 100 : 0;
+    const totLav = lavorate.reduce((a, b) => a + b, 0);
+    const totPrev = preventivate.reduce((a, b) => a + b, 0);
+    const diff = totLav - totPrev; // Positivo = eccedenza, Negativo = risparmio
 
-        const diffClass = diff > 0 ? 'text-success' : (diff < 0 ? 'text-danger' : 'text-muted');
-        const diffText = diff > 0 ? 'Eccedenza' : (diff < 0 ? 'Sottoutilizzo' : 'In linea');
+    // 🔥 LOGICA ECONOMICA CORRETTA
+    // diff > 0  => ore lavorate > ore preventivate => PERDITA (rosso)
+    // diff < 0  => ore lavorate < ore preventivate => GUADAGNO (verde)
+    // diff === 0 => in linea (grigio)
+    const diffClass = diff > 0 ? 'text-danger' : (diff < 0 ? 'text-success' : 'text-muted');
+    const diffText = diff > 0 ? 'Eccedenza (perdita)' : (diff < 0 ? 'Risparmio (guadagno)' : 'In linea');
 
-        container.innerHTML = `
-            <div class="d-flex justify-content-around flex-wrap gap-2 p-2 bg-light rounded">
-                <span><strong>📊 Totale Lavorate:</strong> ${Utils.formattaOreDecimali(totLav)} ore</span>
-                <span><strong>📋 Totale Preventivate:</strong> ${Utils.formattaOreDecimali(totPrev)} ore</span>
-                <span class="${diffClass}"><strong>${diffText}:</strong> ${Utils.formattaOreDecimali(Math.abs(diff))} ore (${pct.toFixed(1)}%)</span>
-                <span class="text-muted"><small>Anno ${anno}</small></span>
-            </div>
-        `;
-    }
+    // Calcolo percentuale (riferita al preventivo)
+    const pct = totPrev > 0 ? (diff / totPrev) * 100 : 0;
+    const pctText = totPrev > 0 
+        ? `(${diff > 0 ? '+' : ''}${pct.toFixed(1)}%)` 
+        : '';
+
+    // Scegli l'icona e il colore in base al segno
+    const icona = diff > 0 ? '📈' : (diff < 0 ? '📉' : '➖');
+
+    container.innerHTML = `
+        <div class="d-flex justify-content-around flex-wrap gap-2 p-2 bg-light rounded">
+            <span><strong>📊 Totale Lavorate:</strong> ${Utils.formattaOreDecimali(totLav)} ore</span>
+            <span><strong>📋 Totale Preventivate:</strong> ${Utils.formattaOreDecimali(totPrev)} ore</span>
+            <span class="${diffClass}">
+                <strong>${icona} ${diffText}:</strong> 
+                ${Utils.formattaOreDecimali(Math.abs(diff))} ore 
+                <small>${pctText}</small>
+            </span>
+            <span class="text-muted"><small>Anno ${anno}</small></span>
+        </div>
+    `;
+}
 
     mostraMessaggioGraficoVuoto(canvas, messaggio) {
         const ctx = canvas.getContext('2d');
